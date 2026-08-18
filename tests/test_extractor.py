@@ -1,3 +1,5 @@
+import pytest
+
 from smt_completeness.extractor import load_offline_ir, self_check, extract
 from smt_completeness.ir import Rule, RuleKind, Priority, Condition, Policy
 from smt_completeness.vocab import Decision
@@ -39,3 +41,8 @@ def test_extract_offline_returns_policy():
     p = extract("smt_completeness/data/ir_openclaw.yaml", use_llm=False)
     assert isinstance(p, Policy)
     assert len(p.rules) == 24
+
+
+def test_extract_non_yaml_without_llm_raises():
+    with pytest.raises(ValueError, match="离线模式仅支持 YAML IR"):
+        extract("README.md", use_llm=False)

@@ -6,3 +6,6 @@ out/
 .env
 .superpowers/
 .worktrees/
+/_*.py
+/_*.txt
+/_*.bin

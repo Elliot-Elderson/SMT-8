@@ -19,6 +19,12 @@ def test_render_markdown_contains_key_metrics():
     assert "threats to validity" in md.lower() or "威胁有效性" in md
 
 
+def test_render_markdown_danger_cube_labels_flag_false_literally():
+    md = render_markdown(build_report(load_offline_ir()))
+    assert "flag_false≈don't-care" not in md
+    assert "flag_false=" in md
+
+
 def test_write_reports_creates_three_files(tmp_path):
     md_path, json_path, smt_path = write_reports(load_offline_ir(), str(tmp_path))
     assert md_path.endswith(".md")

@@ -53,10 +53,17 @@ def check_consistency(policy: Policy) -> ConflictReport:
     assert (count > 0) == (z3_example is not None), \
         f"C3 对账失败：枚举 count={count} 与 Z3 witness={z3_example} 不一致"
 
+    if py_example:
+        deny_ids = [r.id for r in deny_rules if r.condition.matches(py_example)]
+        chal_ids = [r.id for r in chal_rules if r.condition.matches(py_example)]
+    else:
+        deny_ids = []
+        chal_ids = []
+
     example = state_to_dict(py_example) if py_example else None
     return ConflictReport(
         overlap_count=count,
         example_state=example,
-        deny_rule_ids=[r.id for r in deny_rules],
-        challenge_rule_ids=[r.id for r in chal_rules],
+        deny_rule_ids=deny_ids,
+        challenge_rule_ids=chal_ids,
     )

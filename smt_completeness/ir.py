@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .state_space import State
 from .vocab import ALL_FLAGS, Decision, Operation, ResourceClass, TargetZone
@@ -67,6 +67,20 @@ class Rule(BaseModel):
     extraction_confidence: Literal["high", "medium", "low"]
     reviewer_status: str = "auto_approved"
     provenance: Provenance = Provenance.EXTRACTED
+
+    @model_validator(mode="after")
+    def _kind_matches_decision(self) -> "Rule":
+        expected = {
+            RuleKind.MANDATORY_DENY: Decision.DENY,
+            RuleKind.MUST_CHALLENGE: Decision.CHALLENGE,
+            RuleKind.MAY_ALLOW: Decision.ALLOW,
+        }.get(self.kind)
+        if expected is not None and self.decision != expected:
+            raise ValueError(
+                f"规则 kind={self.kind.value!r} 要求 decision={expected.value!r}，"
+                f"实际为 {self.decision.value!r}"
+            )
+        return self
 
 
 class Policy(BaseModel):

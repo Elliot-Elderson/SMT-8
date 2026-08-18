@@ -10,6 +10,7 @@ from .analysis.tightening import TighteningReport, check_tightening
 from .compiler import export_smtlib
 from .extractor import SelfCheckReport, self_check
 from .ir import Policy
+from .vocab import ALL_FLAGS
 from .threats.baseline import BaselineReport, check_baseline
 
 ASSUMPTIONS = [
@@ -79,11 +80,18 @@ def render_markdown(report: FullReport) -> str:
     if c.danger_cubes:
         lines.append("### 危险面待补 cube（Top 10）\n")
         for cube in c.danger_cubes[:10]:
+            dc_flags = sorted(
+                f for f in ALL_FLAGS
+                if f not in cube.flag_true and f not in cube.flag_false
+            )
+            dc_part = f" dc={_format_cube_value(dc_flags)}" if dc_flags else ""
             lines.append(
                 f"- op={_format_cube_value(cube.operation)} "
                 f"rc={_format_cube_value(cube.resource_class)} "
                 f"zone={_format_cube_value(cube.target_zone)} "
-                f"flag_true={cube.flag_true} flag_false≈don't-care size={cube.size}"
+                f"flag_true={_format_cube_value(cube.flag_true)} "
+                f"flag_false={_format_cube_value(cube.flag_false)}"
+                f"{dc_part} size={cube.size}"
             )
         lines.append("")
 

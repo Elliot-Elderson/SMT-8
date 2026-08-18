@@ -63,7 +63,10 @@ def extract(doc_path: str, use_llm: bool = False, model: str = "gpt-4o") -> Poli
     if not use_llm:
         if doc_path.endswith((".yaml", ".yml")):
             return load_offline_ir(doc_path)
-        return load_offline_ir()
+        raise ValueError(
+            f"离线模式仅支持 YAML IR 文件（.yaml/.yml），收到: {doc_path!r}。"
+            "请提供 YAML 路径，或使用 --use-llm 从自然语言文档抽取。"
+        )
     return _extract_with_llm(doc_path, model=model)
 
 

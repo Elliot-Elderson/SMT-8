@@ -47,3 +47,18 @@ def test_rules_of_kind():
     p = Policy(rules=[_rule(id="R1"), _rule(id="R2", kind=RuleKind.MAY_ALLOW,
                                             decision=Decision.ALLOW)])
     assert [r.id for r in p.rules_of_kind(RuleKind.MANDATORY_DENY)] == ["R1"]
+
+
+def test_rule_kind_must_match_decision():
+    with pytest.raises(ValidationError):
+        _rule(kind=RuleKind.MANDATORY_DENY, decision=Decision.ALLOW)
+    with pytest.raises(ValidationError):
+        _rule(kind=RuleKind.MUST_CHALLENGE, decision=Decision.DENY)
+    with pytest.raises(ValidationError):
+        _rule(kind=RuleKind.MAY_ALLOW, decision=Decision.CHALLENGE)
+
+    assert _rule(kind=RuleKind.MANDATORY_DENY, decision=Decision.DENY).id == "R1"
+    assert _rule(kind=RuleKind.MUST_CHALLENGE, decision=Decision.CHALLENGE,
+                 id="R-chal").id == "R-chal"
+    assert _rule(kind=RuleKind.MAY_ALLOW, decision=Decision.ALLOW,
+                 id="R-allow").id == "R-allow"
