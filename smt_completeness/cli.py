@@ -11,8 +11,15 @@ def run_pipeline(
     out_dir: str,
     complete: bool = True,
     use_llm: bool = False,
+    llm_provider: str = "openai",
+    llm_model: str | None = None,
 ) -> dict:
-    policy = extract(doc_path, use_llm=use_llm)
+    policy = extract(
+        doc_path,
+        use_llm=use_llm,
+        provider=llm_provider,
+        model=llm_model,
+    )
     check = self_check(policy)
     if not check.ok:
         raise ValueError(
@@ -42,7 +49,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--doc", required=True, help="需求文档或离线 IR(.yaml) 路径")
     parser.add_argument("--out", default="out", help="报告输出目录")
     parser.add_argument("--no-complete", action="store_true", help="跳过 LLM 闭环补全")
-    parser.add_argument("--use-llm", action="store_true", help="启用真实 LLM 抽取（需 API key）")
+    parser.add_argument(
+        "--use-llm",
+        action="store_true",
+        help="启用真实 LLM 抽取（openai 需 OPENAI_API_KEY；deepseek 需 DEEPSEEK_API_KEY）",
+    )
+    parser.add_argument(
+        "--llm-provider",
+        choices=["openai", "deepseek"],
+        default="openai",
+        help="LLM 提供方（默认 openai；可选 deepseek）",
+    )
+    parser.add_argument(
+        "--llm-model",
+        default=None,
+        help="覆盖默认模型（openai 默认 gpt-4o；deepseek 默认 deepseek-chat）",
+    )
     args = parser.parse_args(argv)
 
     result = run_pipeline(
@@ -50,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
         out_dir=args.out,
         complete=not args.no_complete,
         use_llm=args.use_llm,
+        llm_provider=args.llm_provider,
+        llm_model=args.llm_model,
     )
     md, js, smt = result["report_paths"]
     print(f"[报告] Markdown: {md}")

@@ -58,7 +58,12 @@ def self_check(policy: Policy) -> SelfCheckReport:
     )
 
 
-def extract(doc_path: str, use_llm: bool = False, model: str = "gpt-4o") -> Policy:
+def extract(
+    doc_path: str,
+    use_llm: bool = False,
+    provider: str = "openai",
+    model: str | None = None,
+) -> Policy:
     """Load the offline IR by default; optionally extract IR with an LLM."""
     if not use_llm:
         if doc_path.endswith((".yaml", ".yml")):
@@ -67,14 +72,18 @@ def extract(doc_path: str, use_llm: bool = False, model: str = "gpt-4o") -> Poli
             f"离线模式仅支持 YAML IR 文件（.yaml/.yml），收到: {doc_path!r}。"
             "请提供 YAML 路径，或使用 --use-llm 从自然语言文档抽取。"
         )
-    return _extract_with_llm(doc_path, model=model)
+    return _extract_with_llm(doc_path, provider=provider, model=model)
 
 
-def _extract_with_llm(doc_path: str, model: str) -> Policy:  # pragma: no cover
-    import instructor
-    from openai import OpenAI
+def _extract_with_llm(
+    doc_path: str,
+    provider: str = "openai",
+    model: str | None = None,
+) -> Policy:  # pragma: no cover
+    from .llm_client import build_instructor_client, resolve_model
 
-    client = instructor.from_openai(OpenAI())
+    client = build_instructor_client(provider)
+    resolved_model = resolve_model(provider, model)
     with open(doc_path, encoding="utf-8") as f:
         doc = f.read()
     prompt = (
@@ -83,7 +92,7 @@ def _extract_with_llm(doc_path: str, model: str) -> Policy:  # pragma: no cover
         "每条规则给出 source_anchor 溯源。\n\n" + doc
     )
     policy: Policy = client.chat.completions.create(
-        model=model,
+        model=resolved_model,
         response_model=Policy,
         messages=[{"role": "user", "content": prompt}],
         max_retries=3,

