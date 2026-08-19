@@ -36,3 +36,19 @@ def test_main_returns_zero(tmp_path):
         ]
     )
     assert rc == 0
+
+
+def test_main_accepts_deepseek_provider_offline(tmp_path):
+    # offline path: provider flag is accepted even when --use-llm is off
+    rc = __import__("smt_completeness.cli", fromlist=["main"]).main(
+        [
+            "--doc",
+            "smt_completeness/data/ir_openclaw.yaml",
+            "--out",
+            str(tmp_path / "o2"),
+            "--no-complete",
+            "--llm-provider",
+            "deepseek",
+        ]
+    )
+    assert rc == 0
