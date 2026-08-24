@@ -543,7 +543,7 @@ Set-Location <仓库根目录>
 $env:PYTHONPATH = (Get-Location).Path
 ```
 
-控制台中文可能乱码（代码页），**文件是 UTF-8**，请用编辑器打开 `report.md`。
+控制台中文可能乱码（代码页），**文件是 UTF-8**，请用编辑器打开 `report_before.md`；若跑了补全流程，再打开 `report_after.md`。
 
 ## 4.2 安装
 
@@ -587,7 +587,7 @@ python -m smt_completeness.cli --doc PATH --out DIR
 [报告] Markdown: ...
 [报告] JSON:     ...
 [产物] SMT-LIB:  ...
-[补全] 轮数=... 收敛=... 待人工介入=...
+[补全] 轮数=... 收敛=... 人工复核项=...
 [补全后报告] ...
 ```
 
@@ -662,11 +662,12 @@ python -m smt_completeness.cli --doc Abstract_Access_Control_Requirements.md --o
 
 ## 4.6 典型场景 C：解释「还缺哪些方面」
 
-打开 `report.md` §6：
+先看本次运行的主报告：`report_before.md` 给出补全前的缺口，`report_after.md`（未加 `--no-complete` 时生成）在 §6「补全前后对照」汇总指标变化。
 
-1. 覆盖率当作**相对这 18 条种子**的分数，不要说成「对全部 ATT&CK 覆盖 66%」。
-2. 需求缺失 → 能否在现有四维上加规则（凭据 write、bash history 映射到 config 读等，后者是近似，A6）。
+1. 对照 `report_before.md` / `report_after.md` 的 V_unspecified、倒挂数、规则数，说明补全实际关闭了哪些默认 Allow 或敏感度倒挂。
+2. 需求缺失 → 能否在现有四维上加规则（凭据 write、bash history 映射到 config 读等，后者是近似）。
 3. 词表缺失 → 列入下一阶段观察维度 backlog，而不是催更多 YAML 规则。
+4. `smt_completeness/threats/baseline.py` 只是可选保留模块；若要复核外部威胁种子，可单独调用，不把 18 条种子的覆盖率当作报告阅读主路径。
 
 ## 4.7 典型场景 D：判断一条新需求是否有害
 
@@ -742,7 +743,7 @@ print(decide_py(s, p), must_allow(s, p))  # 预期 Allow / True
 
 ### 4）补全不收敛或 todos 非空
 
-- 读 stdout「待人工介入」；实现把文案放在 `CompletionResult.manual_review_todos`（CLI 只打长度）。可在 Python 里 `run_completion(load_offline_ir())` 打印 `todos`。
+- 读 stdout「人工复核项」；实现把文案放在 `CompletionResult.manual_review_todos`（CLI 只打长度）。可在 Python 里 `run_completion(load_offline_ir())` 打印 `todos`。
 - 不单调：新规则不应让任何状态变得更宽松；若发生则是 cube 与 D 的 bug。
 - `V_unspecified_allow` 不降：cube 可能与已有规则重叠或泛化失败。
 

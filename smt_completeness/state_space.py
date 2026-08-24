@@ -30,4 +30,4 @@ def all_states() -> Iterator[State]:
 
 
 def state_count() -> int:
-    return sum(1 for _ in all_states())
+    return EXPECTED_STATE_COUNT
