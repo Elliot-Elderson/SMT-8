@@ -72,11 +72,7 @@ def _find_pair_examples(
     return results
 
 
-def find_inversion_pair(policy: Policy) -> tuple[State, State] | None:
-    """Find one state pair where rank(rc1) > rank(rc2) and D(rc1) < D(rc2)."""
-    ranked = [rc for rc in ResourceClass if sensitivity_rank(rc) is not None]
-    ranks = {rc: sensitivity_rank(rc) for rc in ranked}
-
+def _build_inversion_constraint(ranked, ranks):
     def constraint(env, rc2, D1, D2):
         options = [
             z3.And(env.rc == env._rc_map[h.value], rc2 == env._rc_map[l.value])
@@ -86,7 +82,16 @@ def find_inversion_pair(policy: Policy) -> tuple[State, State] | None:
             return z3.BoolVal(False)
         return z3.And(z3.Or(options), D1 < D2)
 
-    pairs = _find_pair_examples(policy, constraint, max_examples=1)
+    return constraint
+
+
+def find_inversion_pair(policy: Policy) -> tuple[State, State] | None:
+    """Find one state pair where rank(rc1) > rank(rc2) and D(rc1) < D(rc2)."""
+    ranked = [rc for rc in ResourceClass if sensitivity_rank(rc) is not None]
+    ranks = {rc: sensitivity_rank(rc) for rc in ranked}
+    pairs = _find_pair_examples(
+        policy, _build_inversion_constraint(ranked, ranks), max_examples=1
+    )
     if not pairs:
         return None
     s1, s2, _, _ = pairs[0]
@@ -107,16 +112,9 @@ def check_monotonicity(policy: Policy) -> MonotonicityReport:
     inversion_count = pair_env.count_inversions()
     asymmetry_count = pair_env.count_equal_rank_asymmetry()
 
-    def inversion_constraint(env, rc2, D1, D2):
-        options = [
-            z3.And(env.rc == env._rc_map[h.value], rc2 == env._rc_map[l.value])
-            for h in ranked for l in ranked if ranks[h] > ranks[l]
-        ]
-        if not options:
-            return z3.BoolVal(False)
-        return z3.And(z3.Or(options), D1 < D2)
-
-    inversion_pairs = _find_pair_examples(policy, inversion_constraint)
+    inversion_pairs = _find_pair_examples(
+        policy, _build_inversion_constraint(ranked, ranks)
+    )
     inversions = [
         InversionExample(
             high_state=state_to_dict(s1),
