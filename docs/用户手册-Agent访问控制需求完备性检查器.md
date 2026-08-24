@@ -131,7 +131,7 @@ smt_completeness/
     monotonicity.py     敏感度偏序 + 同级不对称
   threats/baseline.py   外部不变量逐条检验
   report.py             汇总 Markdown/JSON + 调 SMT 导出
-  completion.py         危险面 → 新 Deny 规则 → 单调验证 → 再分析
+  completion.py         卫生 → 倒挂对齐 → 未表态 Challenge → 单调验证
   cli.py                命令行入口
   data/
     ir_openclaw.yaml    离线 IR
@@ -151,10 +151,10 @@ tests/                  pytest，testpaths=tests（见 pytest.ini）
 | 组件 | 版本约束 | 为什么选它 | 为什么不选常见替代 |
 | --- | --- | --- | --- |
 | Python 3.10+ | 项目用 `str \| None` 等语法 | 全仓库一种语言，Windows 零编译 | — |
-| `z3-solver` | ≥4.13 | 工业 SMT 标准；判定函数可导出 SMT-LIB | 状态空间约 10⁵，不需要 GANAK/BDD/第二求解器 |
+| `z3-solver` | ≥4.13 | 工业 SMT 标准；SAT/UNSAT 查询、反例与 witness 可导出 SMT-LIB | Z3 不负责模型计数；计数交给 BDD（`dd`） |
 | `pydantic` ≥2.8 | 随 instructor | IR 与 LLM 输出同一 schema | 纯 prompt 无法强制封闭词表 |
 | `instructor` ≥1.0 | 结构化抽取 | 校验失败自动带错重试 | 手写 JSON 解析易漂 |
-| 标准库穷举 | — | 精确计数 + 地面真值 | Quacky 用模型计数器，规模不值得 |
+| `dd` | ≥0.6 | one-hot BDD 精确计数 Valid / explicit / unspecified | 生产分析不跑 Python `all_states()` 全枚举 |
 | `pyyaml` | IR/种子表 | 人可审阅 | JSON 对中文溯源不够友好 |
 
 **Z3 编码约定（踩过的坑，写进设计 §8.3）**
@@ -162,7 +162,7 @@ tests/                  pytest，testpaths=tests（见 pytest.ini）
 - 判定用 **Int 0/1/2**，不用 `z3.Datatype`：「更严格」就是数值更大。
 - 枚举维度用 `EnumSort`；判定用嵌套 `If`，查询落在无量词有限域。
 - 每个 `Z3Env` 给 sort 加唯一前缀 `smtc_N_`，避免多次建环境时符号冲突。
-- 穷举分母是**合法状态数** `6×10×4×2⁹ = 122880`，不是二进制码点 2ⁿ。
+- 分母是**合法状态数** `6×10×4×2⁹ = 122880`，由 BDD `count(Valid)` 得到，不是二进制码点 2ⁿ，也不是 Python 枚举循环。
 
 ---
 
@@ -172,9 +172,9 @@ tests/                  pytest，testpaths=tests（见 pytest.ini）
 
 ## 2.1 总设计思路：神经符号，而不是「让 LLM 当裁判」
 
-流水线是 **LLM（或离线 fixture）提议结构，求解器与穷举持有安全逻辑**。这与 AutoCedar 的纪律一致：模型只提候选，验证器裁决。
+流水线是 **LLM（或离线 fixture）提议结构，Z3 与 BDD 持有安全逻辑**。这与 AutoCedar 的纪律一致：模型只提候选，验证器裁决。
 
-Demo 里补全更极端：`synthesize_rule_for_cube` **并不调用 LLM**，而是由分析器把危险 cube 直接升成 `mandatory_deny`；`render_chinese` 只是中文模板，当前报告主路径甚至不调用它。`--use-llm` 只作用在**抽取**阶段。
+Demo 里补全不让 LLM 当裁判：三条路径依次处理卫生问题、敏感度倒挂对齐、未表态区域的 Challenge 显式化；未表态不会被默认升成 Deny。`render_chinese` 只是中文模板，当前报告主路径甚至不调用它。`--use-llm` 只作用在**抽取**阶段。
 
 ## 2.2 需求文档如何映射成形式对象
 
@@ -189,7 +189,7 @@ OpenClaw 文档本身就是一份「上界 + 中间层 + 下界 + 执行语义�
 | §6.1 行为归一化 | 可观察维度词汇表 V | `operation` / `resource_class` / `target_zone` / flags |
 | §6.3 策略选择顺序 | 判定函数消解 | `decide_py` |
 | §5 结尾限定语 | floor 必须减去 §3、§4 | `must_allow` |
-| §9 实现限制 | 长期策略看不到写入内容等 | 报告里的 `V_deferred` + 词表缺失 |
+| §9 实现限制 | 长期策略看不到写入内容等 | 报告里的 `V_unspecified_challenge` + 词表缺失 |
 
 **为什么这样切**：与 IFCIL（CSF 2022 / ACM TOPS）把需求分成 **functional requirements（必须能完成的任务）** 与 **security requirements（必须挡住的流）** 是同一结构；也与 AutoCedar 的 floor / ceiling 一致。没有下界，分析会把「全 Deny」当成最安全——那在工程上不可用。
 
@@ -225,11 +225,11 @@ OpenClaw 文档本身就是一份「上界 + 中间层 + 下界 + 执行语义�
 |S| = 6 \times 10 \times 4 \times 2^{9} = 122880
 \]
 
-代码常量：`EXPECTED_STATE_COUNT`。测试会核对枚举个数。
+代码常量：`EXPECTED_STATE_COUNT`。测试断言 `EXPECTED_STATE_COUNT == 122880`；`BDDEnv` 会在 `count(Valid)` 不匹配时抛错。
 
-**为什么穷举而不是模型计数**：Quacky（ICSE 2022）用 SMT + 模型计数器量化 IAM 策略「有多宽松」。本 demo 状态空间在 10⁵ 量级，Python 全枚举是秒到十秒级，同时充当 Z3 的地面真值。设计因此砍掉 BDD、GANAK、cvc5、Cedar 多引擎。
+**为什么 BDD 计数 + Z3 反例**：Quacky（ICSE 2022）用 SMT + 模型计数器量化 IAM 策略「有多宽松」。本 demo 状态空间在 10⁵ / 122880 量级，计数用 BDD，有无性与反例用 Z3；`all_states()` 仅保留为调试辅助，生产分析与补全禁止穷举。
 
-**立方体（cube）**：若干维取具体值、其余 don’t-care 的状态集合。条件里「缺省维度 = 通配」。危险面散点会先泛化成少量 cube，再交给补全（逐字面丢弃：能放宽且整块仍在危险集内才丢）。出处：防火墙分析里用 BDD 表示谓词集合（FIREMAN, S&P 2006）；Margrave（LISA 2010）强调**穷尽具体场景**比单反例更适于给人看。
+**立方体（cube）**：若干维取具体值、其余 don’t-care 的状态集合。条件里「缺省维度 = 通配」。未表态立方体会先泛化成少量 cube，再交给补全；泛化时限制 `k≤3`，并丢弃与当前解释无关的 flag。出处：防火墙分析里用 BDD 表示谓词集合（FIREMAN, S&P 2006）；Margrave（LISA 2010）强调**穷尽具体场景**比单反例更适于给人看。
 
 ## 2.5 中间表示 IR
 
@@ -246,7 +246,7 @@ OpenClaw 文档本身就是一份「上界 + 中间层 + 下界 + 执行语义�
 | `reviewer_status` | demo 默认 `auto_approved` |
 | `provenance` | extracted 或 llm_synthesized |
 
-**自检 `self_check`**：id 唯一；每条规则在 122880 个状态上至少命中一次（非 vacuity）。Vacuity 作为准入门槛来自 Cedar/AutoCedar 的 match-vacuity 检查思想；本实现用穷举而非 SymCC。
+**自检 `self_check`**：id 唯一；每条规则在合法状态空间上至少命中一次（非 vacuity）。Vacuity 作为准入门槛来自 Cedar/AutoCedar 的 match-vacuity 检查思想；本实现用 Z3 `is_vacuous`，不是枚举。
 
 离线模式若 `--doc` 不是 `.yaml/.yml`，会 **ValueError**，避免把 Markdown 静默换成 fixture。
 
@@ -264,8 +264,8 @@ OpenClaw 文档本身就是一份「上界 + 中间层 + 下界 + 执行语义�
 
 因为有默认兜底，**不存在 Undefined**。所以「盲区」不是「没定义」，而是：
 
-- 无规则且落入**默认 Allow** → 真实攻击面 `V_danger`
-- 无规则且落入**默认 Challenge** → 对 LLM 的依赖 `V_deferred`
+- 无规则且落入**默认 Allow** → `V_unspecified_allow`
+- 无规则且落入**默认 Challenge** → `V_unspecified_challenge`
 
 **学术对照**：SELinux `neverallow` 压倒 `allow`、Cedar deny-overrides、AWS explicit deny，都是同一优先序。Zelkova（FMCAD 2018）把「对所有 request context 做 SMT 推理」对照「逐请求模拟」；本项目的 D 是同一思想在三值、有限抽象上的实现。
 
@@ -287,13 +287,13 @@ OpenClaw 文档本身就是一份「上界 + 中间层 + 下界 + 执行语义�
 
 ## 2.8 五项内部分析
 
-设计文写「每项 Python + Z3 对账」。**实现上双轨对账目前落实在 C3**；其余以 Python 穷举为主（终审已记录为计划裁剪，不是漏实现）。
+设计文写「每项 Python + Z3 对账」。当前生产路径使用 Z3 给 witness / 反例、BDD 给计数；Python `all_states()` 只作为调试辅助，不作为分析与补全主路径。
 
 ### C3 一致性
 
 **定义**：效果优先级是设计不是缺陷。真正要报的是 **同为 mandatory 但效果不同且共同命中**。Demo 检测 `mandatory_deny ∩ must_challenge`：Challenge 被 Deny 掩盖。
 
-- Python：数有多少状态两边都命中，记下第一个例子。
+- BDD：计数两边共同命中的状态体积。
 - Z3：`SAT(deny_expr ∧ chal_expr)`，`find_witness`。
 - 断言：`count>0` 当且仅当 Z3 有模型。
 - JSON 里的 `deny_rule_ids` / `challenge_rule_ids` 是**命中该反例状态的规则**，不是该 kind 下全部规则。
@@ -317,8 +317,8 @@ OpenClaw 离线 IR 上重叠约 **5052** 个状态（例如写 config 且带 `we
 对每个状态：
 
 - 任一条 deny/challenge/allow 命中 → 计入 `V_explicit`
-- 否则若 `is_default_allow` → `V_danger`
-- 否则 → `V_deferred`
+- 否则若 `is_default_allow` → `V_unspecified_allow`
+- 否则 → `V_unspecified_challenge`
 
 三者之和必须等于 122880。
 
@@ -327,10 +327,10 @@ OpenClaw 离线 IR 上重叠约 **5052** 个状态（例如写 config 且带 `we
 | 指标 | 约数 | 读法 |
 | --- | --- | --- |
 | V_explicit | 121428（98.82%） | 长期规则已经说话 |
-| V_danger | 8（0.01%） | 默认 Allow，应优先补 |
-| V_deferred | 1444（1.18%） | 甩给 LLM；量化文档 §9「长期策略表达不了内容级授权」 |
+| V_unspecified_allow | 8（0.01%） | 无显式规则但默认 Allow，应优先显式化 |
+| V_unspecified_challenge | 1444（1.18%） | 无显式规则但默认 Challenge；量化文档 §9「长期策略表达不了内容级授权」 |
 
-补全后典型变化：规则 24→32，**V_danger → 0**，V_deferred 仍约 1444。说明：闭环只吃默认 Allow，不自动补「应 Deny 却落在 Challenge」的洞（例如凭据写入）。
+补全后典型变化：规则 24→32，**V_unspecified_allow → 0**，`V_unspecified_challenge` 仍约 1444。说明：闭环把默认 Allow 显式化，并对未表态默认 Challenge 保持 Challenge；不会把未表态区域默认升成 Deny。
 
 **定量覆盖的文献**：Quacky 的 permissiveness 是 `#允许 / #宇宙`。这里把宇宙切成三块，语义比单一许可度更贴 Agent（有 Challenge 层）。
 
@@ -360,7 +360,7 @@ OpenClaw **必现亮点**：读 `agent_memory` 可为 Allow(0)，同条件下读
 
 **定义**：每条不变量形如「凡满足 Pre 的状态，D 不得低于 min_decision」（1=Challenge，2=Deny）。
 
-检验：`SAT(Pre ∧ D < min)` 在穷举上体现为找第一个反例。
+检验：`SAT(Pre ∧ D < min)` 由 Z3 给 witness；相关体积由 BDD 计数。
 
 - `expressible: false` → **词表缺失**（不是少写一条规则）
 - 可表达但有反例 → **需求缺失**
@@ -368,7 +368,7 @@ OpenClaw **必现亮点**：读 `agent_memory` 可为 Allow(0)，同条件下读
 
 Demo 18 条，溯源 ATT&CK / ATLAS 等，映射到本词表。完整 120 条种子在 `docs/research/03-threat-baseline.md`。
 
-离线 IR 补全前约 **12/18 = 66.67%**；补全后约 **13/18**（记忆读取进危险面被 Deny 后，TINV-PRIV-READ-MEM 可变为覆盖）。**TINV-CRED-18 凭据写入**仍是需求缺失：它落在 V_deferred，不在补全循环里。
+离线 IR 补全前约 **12/18 = 66.67%**；补全后约 **13/18**（记忆读取被显式化后，TINV-PRIV-READ-MEM 可变为覆盖）。**TINV-CRED-18 凭据写入**仍是需求缺失：它落在 `V_unspecified_challenge`，不会被默认升成 Deny。
 
 **三类必看缺口**
 
@@ -384,11 +384,11 @@ Demo 18 条，溯源 ATT&CK / ATLAS 等，映射到本词表。完整 120 条种
 
 每轮：
 
-1. 若 `V_danger==0` → 收敛
-2. 每个危险 cube 合成一条 `LLM-k` 的 mandatory_deny
-3. `verify_monotone`：∀s D_new(s) ≥ D_old(s)（对应文档 §8「历史拒绝不得变允许」）
-4. 不单调 → 停止，写 `manual_review_todos`
-5. `V_danger` 未下降 → 停止（当前实现仍合入 candidate，然后停）
+1. 卫生补全：修正自检、恒假、结构性缺口
+2. 倒挂对齐：在敏感度偏序上消除可证明的更宽松高敏感状态
+3. 未表态显式化：把默认 Allow / 默认 Challenge 的区域写成显式规则，其中未表态默认保持 Challenge，不默认 Deny
+4. `verify_monotone`：∀s D_new(s) ≥ D_old(s)（对应文档 §8「历史拒绝不得变允许」）
+5. 不单调 → 停止，写 `manual_review_todos`
 6. 否则合入，最多 5 轮
 
 终止性：三元链上严格改善有限。安全逻辑在分析器，不在 LLM。
@@ -419,7 +419,7 @@ Agent 运行时防护（AgentSpec, Progent, CaMeL）——通常不做「需求�
 | Margrave | Nelson et al., LISA 2010 | 不要求用户另写规格；穷尽场景 |
 | Cedar | Cutler et al., OOPSLA 2024, DOI 10.1145/3649835 | 为可分析性设计语言；vacuity/冗余 API 的思想 |
 | IAM-PolicyRefiner | D’Antoni et al., OOPSLA 2024, PACMPL 8(OOPSLA2):298 | Tightness；无搜索空间则平凡假 |
-| Quacky | Eiers et al., ICSE 2022 Companion, DOI 10.1145/3551349.3559530 | 许可度量化；本项目用穷举代替计数器 |
+| Quacky | Eiers et al., ICSE 2022 Companion, DOI 10.1145/3551349.3559530 | 许可度量化；本项目用 BDD 计数而非生产穷举 |
 | Quantitative Policy Repair | Eiers et al., ISSTA 2023 | must-allow request set |
 | AutoCedar | arXiv:2607.03656 | 抽取+溯源；LLM 不持裁决权；反例分类 |
 | AgentSpec | Wang et al., arXiv:2503.18666（ICSE 2026） | trigger+predicate+enforcement；用户确认 ≈ Challenge |
@@ -534,7 +534,7 @@ UTF-8 文本，含 `Allow=0, Challenge=1, Deny=2` 注释。用 Z3 打开应能�
 ## 4.1 环境要求
 
 - Windows / Linux / macOS，**Python 3.10+**（开发机验证过 3.14）。
-- 内存普通笔记本即可；一次全量分析大约 **1–3 分钟**（含补全与多项 122880 枚举）。
+- 内存普通笔记本即可；一次全量分析大约 **1–3 分钟**（含补全与多项 BDD/Z3 分析）。
 - 离线路径**不需要**网络和 API key。
 - PowerShell 不要用 bash 的 `&&`；用 `;`。建议：
 
@@ -695,10 +695,10 @@ print(decide_py(s, p), must_allow(s, p))  # 预期 Allow / True
 | --- | --- | --- |
 | C3 重叠五千余 | Deny 覆盖 Challenge 是 §6.3 | 看示例，不要清零为目标 |
 | R4 又冗余又可收紧 | 同一覆盖关系 | 文档仍保留「必须再判断」叙事 |
-| 补全后 V_deferred 不变 | 循环只吃 V_danger | 要补凭据写入需改种子驱动或手写规则 |
+| 补全后 V_unspecified_challenge 不变 | 未表态默认 Challenge 不会自动升成 Deny | 要补凭据写入需改种子驱动或手写规则 |
 | H1 非 tight | 至少 §4 可上调 | 按 A4 汇报 |
 | 倒挂计数非 0 | 记忆 vs 上下文 | 对照原文 §2.3 |
-| 分析 1–3 分钟 | 多次全枚举 | 正常 |
+| 分析 1–3 分钟 | BDD/Z3 分析耗时 | 正常 |
 | PowerShell 打印乱码 | 控制台代码页 | 读文件 |
 | `git add .` 想加一堆 `_*.py` | 已 gitignore `/_*.py` | 不要强行加 |
 
@@ -729,9 +729,9 @@ print(decide_py(s, p), must_allow(s, p))  # 预期 Allow / True
 ### 2）报告数字「看起来不对」
 
 1. 确认跑的是**当前代码**（重新 `cli`，不要只看旧 `_demo_out`）。
-2. 核对 `coverage.v_explicit + v_danger + v_deferred == 122880`。
-3. C3 对账失败会 **assert 崩掉**（Python 与 Z3 不一致）——属于实现级 bug，应带 traceback 报修，而不是调阈值。
-4. 威胁覆盖突变：是否改了 `threat_seed.yaml` 或 IR。
+2. 核对 `coverage.v_explicit + coverage.v_unspecified_allow + coverage.v_unspecified_challenge == 122880`。
+3. C3 对账失败会 **assert 崩掉**（BDD 计数与 Z3 witness 不一致）——属于实现级 bug，应带 traceback 报修，而不是调阈值。
+4. 威胁基线结果突变：是否改了 `threat_seed.yaml` 或 IR。
 
 ### 3）LLM 抽取质量差
 
@@ -743,12 +743,12 @@ print(decide_py(s, p), must_allow(s, p))  # 预期 Allow / True
 ### 4）补全不收敛或 todos 非空
 
 - 读 stdout「待人工介入」；实现把文案放在 `CompletionResult.manual_review_todos`（CLI 只打长度）。可在 Python 里 `run_completion(load_offline_ir())` 打印 `todos`。
-- 不单调：新 Deny 不应发生；若发生则是 cube 与 D 的 bug。
-- V_danger 不降：cube 可能与已有规则重叠或泛化失败。
+- 不单调：新规则不应让任何状态变得更宽松；若发生则是 cube 与 D 的 bug。
+- `V_unspecified_allow` 不降：cube 可能与已有规则重叠或泛化失败。
 
 ### 5）性能
 
-单项慢：C4 对每条规则全空间等价（离线 24 条仍可秒到十几秒）；报告任务会串行跑全部分析。不要在循环里对 122880 再套一层无缓存的 `all_states()` 生成器重复物化——`self_check` 已 `list(all_states())` 一次。
+单项慢：C4 对每条规则做全空间等价（离线 24 条仍可秒到十几秒）；报告任务会串行跑全部分析。生产路径依赖 BDD/Z3，不应在分析或补全循环里调用 `all_states()`；该接口只用于调试。
 
 ### 6）从测试定位模块
 
