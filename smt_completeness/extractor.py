@@ -3,8 +3,8 @@ import os
 import yaml
 from pydantic import BaseModel
 
+from .compiler import is_vacuous
 from .ir import Policy
-from .state_space import all_states
 
 _DEFAULT_IR = os.path.join(os.path.dirname(__file__), "data", "ir_openclaw.yaml")
 
@@ -35,13 +35,7 @@ def _duplicate_ids(policy: Policy) -> list[str]:
 
 
 def _vacuous_ids(policy: Policy) -> list[str]:
-    """Return rules that match no state in the finite state space."""
-    states = list(all_states())
-    vacuous: list[str] = []
-    for rule in policy.rules:
-        if not any(rule.condition.matches(state) for state in states):
-            vacuous.append(rule.id)
-    return vacuous
+    return [rule.id for rule in policy.rules if is_vacuous(policy, rule)]
 
 
 def self_check(policy: Policy) -> SelfCheckReport:

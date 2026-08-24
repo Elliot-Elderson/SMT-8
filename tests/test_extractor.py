@@ -46,3 +46,9 @@ def test_extract_offline_returns_policy():
 def test_extract_non_yaml_without_llm_raises():
     with pytest.raises(ValueError, match="离线模式仅支持 YAML IR"):
         extract("README.md", use_llm=False)
+
+
+def test_vacuity_does_not_import_all_states_on_extractor():
+    import smt_completeness.extractor as ext
+    src = open(ext.__file__, encoding="utf-8").read()
+    assert "all_states" not in src
