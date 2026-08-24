@@ -9,6 +9,15 @@ from .nl_patch import apply_nl_patch
 from .report import build_report, render_markdown, write_policy_reports
 
 
+def _rename_smt_export(
+    paths: tuple[str, str, str], out_dir: str, smt_name: str
+) -> tuple[str, str, str]:
+    md_path, json_path, smt_path = paths
+    new_smt_path = os.path.join(out_dir, smt_name)
+    os.rename(smt_path, new_smt_path)
+    return md_path, json_path, new_smt_path
+
+
 def run_pipeline(
     doc_path: str,
     out_dir: str,
@@ -37,7 +46,11 @@ def run_pipeline(
 
     # Build before report and write report_before.* files
     before = build_report(policy)
-    report_paths = write_policy_reports(policy, out_dir, "report_before")
+    report_paths = _rename_smt_export(
+        write_policy_reports(policy, out_dir, "report_before"),
+        out_dir,
+        "policy_before.smt2",
+    )
 
     completion = None
     final_report_paths = None
@@ -51,7 +64,11 @@ def run_pipeline(
         after = build_report(final_policy)
 
         # Write report_after.* files (initial write), then overwrite md with comparison
-        final_report_paths = write_policy_reports(final_policy, out_dir, "report_after")
+        final_report_paths = _rename_smt_export(
+            write_policy_reports(final_policy, out_dir, "report_after"),
+            out_dir,
+            "policy_after.smt2",
+        )
         after_md_path = final_report_paths[0]
         with open(after_md_path, "w", encoding="utf-8") as f:
             f.write(render_markdown(after, label="after", compare=before, completion=result))
