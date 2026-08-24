@@ -23,6 +23,10 @@ class MonotonicityReport(BaseModel):
     equal_rank_examples: list[InversionExample]
 
 
+def count_inversions(policy: Policy) -> int:
+    return PairBDDEnv(policy).count_inversions()
+
+
 def _find_pair_examples(
     policy: Policy,
     constraint_fn,

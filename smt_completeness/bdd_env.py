@@ -126,6 +126,12 @@ class BDDEnv:
             raise ValueError(f"assignment must set exactly one {label}: {true_names}")
         return enum_type(true_names[0].split("_", 1)[1])
 
+    def count_inversions(self) -> int:
+        return PairBDDEnv(self.policy).count_inversions()
+
+    def count_equal_rank_asymmetry(self) -> int:
+        return PairBDDEnv(self.policy).count_equal_rank_asymmetry()
+
 
 class PairBDDEnv:
     """BDD environment for pairs of resource classes sharing op/tz/flags.

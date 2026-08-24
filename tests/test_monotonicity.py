@@ -1,5 +1,6 @@
-from smt_completeness.analysis.monotonicity import check_monotonicity
+from smt_completeness.analysis.monotonicity import check_monotonicity, count_inversions
 from smt_completeness.extractor import load_offline_ir
+from smt_completeness.ir import Policy
 
 
 def test_offline_finds_context_vs_memory_asymmetry():
@@ -25,7 +26,10 @@ def test_monotonicity_module_has_no_all_states():
 
 
 def test_asymmetric_pair_on_tiny_policy():
-    from smt_completeness.ir import Policy
     from tests.policy_fixtures import deny_read_private_context
     rep = check_monotonicity(Policy(rules=[deny_read_private_context()]))
     assert rep.equal_rank_asymmetry_count > 0
+
+
+def test_empty_policy_has_zero_inversions():
+    assert count_inversions(Policy(rules=[])) == 0
