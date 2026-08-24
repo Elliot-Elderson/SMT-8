@@ -104,7 +104,7 @@ def _passes_gates(base_policy: Policy, candidate_rule: Rule) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _hygiene_phase(policy: Policy) -> tuple[Policy, list[str], list[str]]:
+def _hygiene_phase(policy: Policy) -> tuple[Policy, list[str], list[str], list[str]]:
     """Remove redundant rules; narrow MUST_CHALLENGE rules covered by Deny."""
     # Redundancy removal via policies_equivalent
     redundancy = check_redundancy(policy)
@@ -117,6 +117,7 @@ def _hygiene_phase(policy: Policy) -> tuple[Policy, list[str], list[str]]:
     deny_bdd = env._kind(RuleKind.MANDATORY_DENY)
 
     narrowed_ids: list[str] = []
+    skipped_ids: list[str] = []
     new_rules: list[Rule] = []
 
     for rule in current.rules:
@@ -150,9 +151,10 @@ def _hygiene_phase(policy: Policy) -> tuple[Policy, list[str], list[str]]:
                 narrowed_ids.append(rule.id)
                 continue
 
+        skipped_ids.append(rule.id)
         new_rules.append(rule)
 
-    return Policy(rules=new_rules), removed_ids, narrowed_ids
+    return Policy(rules=new_rules), removed_ids, narrowed_ids, skipped_ids
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +172,8 @@ def _inversion_phase(
     if pair is None:
         return policy, [], []
 
-    s_high, _s_low = pair
+    s_high, s_low = pair
+    target = decide_py(s_low, policy)
     added_ids: list[str] = []
     skipped_ids: list[str] = []
 
@@ -182,7 +185,13 @@ def _inversion_phase(
         resource_class=[s_high.resource_class],
     )
 
-    for kind in (RuleKind.MANDATORY_DENY, RuleKind.MUST_CHALLENGE):
+    kinds = (
+        (RuleKind.MANDATORY_DENY, RuleKind.MUST_CHALLENGE)
+        if target is Decision.DENY
+        else (RuleKind.MUST_CHALLENGE,)
+    )
+
+    for kind in kinds:
         seq[0] += 1
         rule_id = f"SYN-{round_idx}-{seq[0]}"
         rule = _make_syn_rule(rule_id, kind, cond, "补全 · 倒挂对齐")
@@ -308,7 +317,7 @@ def run_completion(policy: Policy, max_rounds: int = 5) -> CompletionResult:
         policy_at_start = current
 
         # Phase 1: Hygiene
-        current, removed_ids, narrowed_ids = _hygiene_phase(current)
+        current, removed_ids, narrowed_ids, hygiene_skipped = _hygiene_phase(current)
 
         # Phase 2: Inversion alignment
         current, inv_added, inv_skipped = _inversion_phase(current, i, seq)
@@ -331,7 +340,7 @@ def run_completion(policy: Policy, max_rounds: int = 5) -> CompletionResult:
                 added_rule_ids=inv_added + unspec_added,
                 removed_rule_ids=removed_ids,
                 narrowed_rule_ids=narrowed_ids,
-                skipped=inv_skipped + unspec_skipped,
+                skipped=hygiene_skipped + inv_skipped + unspec_skipped,
                 monotone_ok=is_monotone(policy_at_start, current),
             )
         )
