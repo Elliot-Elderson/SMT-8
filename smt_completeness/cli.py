@@ -14,7 +14,7 @@ def _rename_smt_export(
 ) -> tuple[str, str, str]:
     md_path, json_path, smt_path = paths
     new_smt_path = os.path.join(out_dir, smt_name)
-    os.rename(smt_path, new_smt_path)
+    os.replace(smt_path, new_smt_path)
     return md_path, json_path, new_smt_path
 
 
