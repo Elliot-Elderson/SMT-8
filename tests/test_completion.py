@@ -1,68 +1,34 @@
-from smt_completeness.completion import (
-    verify_monotone,
-    synthesize_rule_for_cube,
-    run_completion,
-)
-from smt_completeness.analysis.coverage import check_coverage
-from smt_completeness.extractor import load_offline_ir
-from smt_completeness.ir import Policy, Rule, RuleKind, Priority, Condition
-from smt_completeness.vocab import Operation, ResourceClass, TargetZone, Decision
+from smt_completeness.analysis.monotonicity import check_monotonicity
+from smt_completeness.compiler import is_monotone, preserves_mustallow
+from smt_completeness.completion import run_completion
+from smt_completeness.ir import Policy, Provenance, RuleKind
+from smt_completeness.vocab import ResourceClass
+from tests.policy_fixtures import deny_read_private_context
 
 
-def test_verify_monotone_true_when_only_tightening():
-    base = load_offline_ir()
-    extra = Rule(
-        id="NEW",
-        source_anchor="llm",
-        kind=RuleKind.MANDATORY_DENY,
-        condition=Condition(
-            operation=[Operation.WRITE],
-            resource_class=[ResourceClass.CREDENTIAL],
-        ),
-        decision=Decision.DENY,
-        priority=Priority.MANDATORY,
-        extraction_confidence="high",
-    )
-    tightened = Policy(rules=base.rules + [extra])
-    assert verify_monotone(base, tightened) is True
-
-
-def test_verify_monotone_false_when_loosening():
-    base = load_offline_ir()
-    loosen = Rule(
-        id="BAD",
-        source_anchor="x",
-        kind=RuleKind.MAY_ALLOW,
-        condition=Condition(
-            operation=[Operation.EXECUTE],
-            resource_class=[ResourceClass.UNKNOWN],
-            target_zone=[TargetZone.EXTERNAL],
-        ),
-        decision=Decision.ALLOW,
-        priority=Priority.LEARNED,
-        extraction_confidence="low",
-    )
-    loosened = Policy(rules=base.rules + [loosen])
-    assert verify_monotone(base, loosened) is False
-
-
-def test_synthesize_rule_for_cube_creates_mandatory_deny_candidate():
-    base = load_offline_ir()
-    cube = check_coverage(base).danger_cubes[0]
-    rule = synthesize_rule_for_cube(cube, idx=7)
-
-    assert rule.id == "LLM-7"
-    assert rule.kind is RuleKind.MANDATORY_DENY
-    assert rule.decision is Decision.DENY
-    assert rule.priority is Priority.MANDATORY
-
-
-def test_run_completion_reduces_danger_and_converges():
-    base = load_offline_ir()
-    before = check_coverage(base).v_danger
+def test_completion_aligns_memory_not_deny_default_allow():
+    base = Policy(rules=[deny_read_private_context()])
+    before_inv = check_monotonicity(base).equal_rank_asymmetry_count
     result = run_completion(base, max_rounds=5)
-    after = check_coverage(result.final_policy).v_danger
-    assert after <= before
-    for rnd in result.rounds:
-        assert rnd.monotone_ok is True
-    assert isinstance(result.converged, bool)
+    assert is_monotone(base, result.final_policy)
+    assert preserves_mustallow(base, result.final_policy)
+    after_inv = check_monotonicity(result.final_policy).equal_rank_asymmetry_count
+    assert after_inv <= before_inv
+    syn = [r for r in result.final_policy.rules if r.provenance is Provenance.SYNTHESIZED]
+    assert any(
+        ResourceClass.AGENT_MEMORY in r.condition.resource_class for r in syn
+    )
+    deny_unspecified_allow = any(
+        r.kind is RuleKind.MANDATORY_DENY
+        and not r.condition.flag_true
+        and r.condition.operation
+        and set(o.value for o in r.condition.operation) <= {"read", "list"}
+        and r.condition.resource_class == []
+        for r in syn
+    )
+    assert deny_unspecified_allow is False
+
+
+def test_completion_module_has_no_all_states():
+    from smt_completeness import completion as m
+    assert "all_states" not in open(m.__file__, encoding="utf-8").read()
