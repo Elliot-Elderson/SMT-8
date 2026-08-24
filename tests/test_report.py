@@ -1,34 +1,26 @@
-import json
-
 from smt_completeness.extractor import load_offline_ir
-from smt_completeness.report import ASSUMPTIONS, build_report, render_markdown, write_reports
+from smt_completeness.report import ASSUMPTIONS, build_report, render_markdown
 
 
-def test_build_report_has_all_sections():
+def test_build_report_has_no_baseline():
     rep = build_report(load_offline_ir())
+    assert not hasattr(rep, "baseline") or "baseline" not in type(rep).model_fields
     assert rep.self_check.ok is True
-    assert rep.coverage.total > 0
-    assert rep.baseline.total == 18
-    assert len(rep.assumptions) == 7
+    assert "A6" not in "".join(ASSUMPTIONS)
+    assert any("A8" in a for a in ASSUMPTIONS)
 
 
-def test_render_markdown_contains_key_metrics():
-    md = render_markdown(build_report(load_offline_ir()))
-    assert "威胁覆盖率" in md
-    assert "V_danger" in md
-    assert "threats to validity" in md.lower() or "威胁有效性" in md
+def test_render_markdown_has_unspecified_not_threat_baseline():
+    md = render_markdown(build_report(load_offline_ir()), label="before")
+    assert "威胁覆盖率" not in md
+    assert "真实攻击面" not in md
+    assert "V_danger" not in md
+    assert "未表态" in md
+    assert "V_explicit" in md
 
 
-def test_render_markdown_danger_cube_labels_flag_false_literally():
-    md = render_markdown(build_report(load_offline_ir()))
-    assert "flag_false≈don't-care" not in md
-    assert "flag_false=" in md
-
-
-def test_write_reports_creates_three_files(tmp_path):
-    md_path, json_path, smt_path = write_reports(load_offline_ir(), str(tmp_path))
-    assert md_path.endswith(".md")
-    data = json.loads(open(json_path, encoding="utf-8").read())
-    assert "coverage" in data
-    assert open(smt_path, encoding="utf-8").read()
-    assert len(ASSUMPTIONS) == 7
+def test_compare_section_when_two_reports():
+    p = load_offline_ir()
+    before = build_report(p)
+    md = render_markdown(before, label="after", compare=before)
+    assert "补全前后对照" in md
