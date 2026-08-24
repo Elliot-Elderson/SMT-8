@@ -3,3 +3,4 @@ instructor>=1.0
 pydantic>=2.8
 pyyaml>=6.0
 pytest>=8.0
+dd>=0.6.0

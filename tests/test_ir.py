@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from smt_completeness.ir import Condition, Rule, RuleKind, Priority, Policy
+from smt_completeness.ir import Condition, Provenance, Rule, RuleKind, Priority, Policy
 from smt_completeness.state_space import State
 from smt_completeness.vocab import Operation, ResourceClass, TargetZone, Decision
 
@@ -62,3 +62,18 @@ def test_rule_kind_must_match_decision():
                  id="R-chal").id == "R-chal"
     assert _rule(kind=RuleKind.MAY_ALLOW, decision=Decision.ALLOW,
                  id="R-allow").id == "R-allow"
+
+
+def test_synthesized_provenance_accepted():
+    r = Rule(
+        id="SYN-0-1",
+        source_anchor="补全 · 倒挂对齐",
+        kind=RuleKind.MANDATORY_DENY,
+        condition=Condition(flag_true=["destructive"]),
+        decision=Decision.DENY,
+        priority=Priority.MANDATORY,
+        extraction_confidence="medium",
+        provenance=Provenance.SYNTHESIZED,
+    )
+    assert r.provenance is Provenance.SYNTHESIZED
+    assert r.provenance.value == "synthesized"

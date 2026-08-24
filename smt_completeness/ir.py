@@ -24,6 +24,7 @@ class Priority(str, Enum):
 class Provenance(str, Enum):
     EXTRACTED = "extracted"
     LLM_SYNTHESIZED = "llm_synthesized"
+    SYNTHESIZED = "synthesized"
 
 
 class Condition(BaseModel):
