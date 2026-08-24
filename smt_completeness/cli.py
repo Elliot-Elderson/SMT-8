@@ -6,7 +6,7 @@ import yaml
 from .completion import run_completion
 from .extractor import extract, self_check
 from .nl_patch import apply_nl_patch
-from .report import build_report, render_markdown, write_policy_reports
+from .report import FullReport, build_report, render_markdown, write_policy_reports
 
 
 def _rename_smt_export(
@@ -30,6 +30,12 @@ def run_pipeline(
     if source_doc is None:
         source_doc = "Abstract_Access_Control_Requirements.md"
 
+    if complete and not os.path.isfile(source_doc):
+        raise FileNotFoundError(
+            f"源需求文档未找到：{source_doc!r}。"
+            "请用 --source-doc 指定路径，或用 --no-complete 跳过补全闭环。"
+        )
+
     policy = extract(
         doc_path,
         use_llm=use_llm,
@@ -47,7 +53,7 @@ def run_pipeline(
     # Build before report and write report_before.* files
     before = build_report(policy)
     report_paths = _rename_smt_export(
-        write_policy_reports(policy, out_dir, "report_before"),
+        write_policy_reports(policy, out_dir, "report_before", report=before),
         out_dir,
         "policy_before.smt2",
     )
@@ -63,9 +69,9 @@ def run_pipeline(
         final_policy = result.final_policy
         after = build_report(final_policy)
 
-        # Write report_after.* files (initial write), then overwrite md with comparison
+        # Write report_after.* files using already-built after report, then overwrite md with comparison
         final_report_paths = _rename_smt_export(
-            write_policy_reports(final_policy, out_dir, "report_after"),
+            write_policy_reports(final_policy, out_dir, "report_after", report=after),
             out_dir,
             "policy_after.smt2",
         )
@@ -101,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--doc", required=True, help="需求文档或离线 IR(.yaml) 路径")
     parser.add_argument("--out", default="out", help="报告输出目录")
-    parser.add_argument("--no-complete", action="store_true", help="跳过 LLM 闭环补全")
+    parser.add_argument("--no-complete", action="store_true", help="跳过 IR 补全闭环，只输出分析报告")
     parser.add_argument(
         "--use-llm",
         action="store_true",

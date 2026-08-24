@@ -5,7 +5,7 @@ from ..bdd_env import PairBDDEnv
 from ..compiler import Z3Env
 from ..ir import Policy
 from ..state_space import State
-from ..vocab import ALL_FLAGS, Operation, ResourceClass, TargetZone, sensitivity_rank
+from ..vocab import Operation, ResourceClass, TargetZone, sensitivity_rank
 from .consistency import state_to_dict
 
 
@@ -33,7 +33,7 @@ def _find_pair_examples(
     *,
     max_examples: int = 20,
 ) -> list[tuple[State, State, int, int]]:
-    """Collect up to max_examples (s1, s2, D1, D2) pairs via Z3 push/pop blocking."""
+    """Collect up to max_examples (s1, s2, D1, D2) pairs via Z3 blocking clauses."""
     env = Z3Env(policy)
     rc2 = z3.Const("smtc_rc2_mono", env.rc_sort)
 

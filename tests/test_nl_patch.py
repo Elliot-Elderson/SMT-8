@@ -39,6 +39,22 @@ def test_inserts_synthesized_deny_under_section_3():
     assert "- 本地读普通文件" in text
 
 
+def test_no_duplicate_annotation_when_source_anchor_is_annotation():
+    initial = Policy(rules=[deny_read_private_context()])
+    extra = make_rule(
+        "SYN-0-2",
+        RuleKind.MANDATORY_DENY,
+        operation=[Operation.READ],
+        resource_class=[ResourceClass.AGENT_MEMORY],
+        source_anchor="补全 · 倒挂对齐",
+        provenance=Provenance.SYNTHESIZED,
+    )
+    final = Policy(rules=initial.rules + [extra])
+    text, _ = apply_nl_patch(SRC, initial, final)
+    assert "补全 · 倒挂对齐；补全 · 倒挂对齐" not in text
+    assert "补全 · 倒挂对齐" in text
+
+
 def test_deleted_rule_gets_annotation():
     r = deny_read_private_context()
     r = r.model_copy(update={"source_anchor": "§3.1 · 禁止读取 Agent 私有上下文文件"})

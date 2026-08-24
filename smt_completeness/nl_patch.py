@@ -105,7 +105,11 @@ def _annotation_for_source(source_anchor: str) -> str:
 def _insert_rule_line(text: str, rule: Rule, annotation: str) -> str:
     section_prefix = _section_prefix_for(rule.kind)
     sentence = render_rule_sentence(rule)
-    line = f"- {sentence}（{rule.source_anchor}；{annotation}）"
+    anchor = rule.source_anchor
+    if anchor in _ANNOTATIONS:
+        line = f"- {sentence}（{anchor}）"
+    else:
+        line = f"- {sentence}（{anchor}；{annotation}）"
     return _insert_under_completion_heading(text, section_prefix, [line])
 
 

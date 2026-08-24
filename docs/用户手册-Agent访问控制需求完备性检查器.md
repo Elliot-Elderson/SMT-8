@@ -28,7 +28,7 @@
         ├── 五项内部分析（一致、冗余、未表态三分区、H1、敏感度偏序）
         ▼
    report_before.md / report_before.json / policy_before.smt2
-        │  （可选闭环 --complete，默认开启）
+        │  （可选，默认开启；--no-complete 可跳过）
         ▼
    run_completion：反例驱动三阶段
      hygiene → 倒挂对齐 → 未表态显式化
@@ -439,7 +439,7 @@ Agent 运行时防护（AgentSpec, Progent, CaMeL）——通常不做「需求�
 
 不要对外宣称「已证明找不到任何更安全的需求」——那是被砍掉的 H2。正确口径见报告第 4 节与 A4。
 
-## 2.12 显式假设 A1–A7（读报告第 7 节时对照）
+## 2.12 显式假设 A1–A8（读报告第 7 节时对照）
 
 | # | 内容 | 若违反会怎样 |
 | --- | --- | --- |
@@ -448,8 +448,8 @@ Agent 运行时防护（AgentSpec, Progent, CaMeL）——通常不做「需求�
 | A3 | MustAllow 推导正确 | H1 假阳/假阴 |
 | A4 | H1 ≠ 绝对紧 | 过度宣称 |
 | A5 | 敏感度来自章节序 | 假倒挂 |
-| A6 | 种子表质量 | 覆盖率不可信 |
 | A7 | 无角色委派等管理语义 | 否则落入 HRU 不可判定区 |
+| A8 | 不使用外部威胁宇宙 | 内部指标不声称外部攻击覆盖 |
 
 ---
 
@@ -466,7 +466,7 @@ Agent 运行时防护（AgentSpec, Progent, CaMeL）——通常不做「需求�
 - 规则总数：IR 条数（离线 24；补全后可到 32）。
 - 自动自检：必须通过，否则 CLI 根本不会写报告。
 
-### §2 三分区体积（C2）——最先看
+### §2 表达力与未表态（C2）——最先看
 
 关注 **V_unspecified**（`v_unspecified_allow` + `v_unspecified_challenge`）。其中 `v_unspecified_allow` 非零表示存在「没规则、系统自动放行」的默认 Allow 盲区。其下 cube：
 
@@ -476,21 +476,27 @@ Agent 运行时防护（AgentSpec, Progent, CaMeL）——通常不做「需求�
 
 早期 `_demo_out/report.md` 曾把 `flag_false` 误标成 don't-care，**当前代码已改正**。请以新跑的 `out/report_before.md` 为准。
 
-### §3 一致性与冗余
+### §3 可补全反例（倒挂例子）
+
+- 严格倒挂数：高敏感资源判定比低敏感更宽松的状态对数量。
+- 同级不对称数：同敏感度等级但判定不同的状态对数量。
+- 每个例子显示「高=... D=... vs 低=... D=...」格式。
+
+### §4 卫生 C3/C4
 
 - 重叠数大：先看示例状态，判断是「Deny 盖住 Challenge」（常为预期）还是真矛盾。
 - 冗余 id：删了对 D 无影响；可能仍有文档/教学价值。
 
-### §4 H1
+### §5 H1 参考
 
 - `is_h1_tight: false` + `R4.*` 可收紧：结合 MustAllow 理解，不要直接改文档把 §4 全改成 Deny。
 - 若将来所有规则都不可上调：只能说「相对 H1 已 tight」。
 
-### §5 敏感度
+### §6 敏感度
 
 倒挂/不对称的「高 / 低」是两个只差 `resource_class` 的状态。`D=` 为 0/1/2。优先看 memory vs private_context。
 
-### §6 补全前后对照（仅 report_after.md）
+### §7 补全前后对照（仅 report_after.md）
 
 出现于 `report_after.md`，标题为「补全前后对照」。可看倒挂数、V_unspecified、规则数等指标的 before→after 变化。外部威胁基线对照不再作为必出节；`threats/baseline.py` 保留为可选模块，可独立调用。
 ## 3.3 `report.json` 字段地图
@@ -551,7 +557,7 @@ $env:PYTHONPATH = (Get-Location).Path
 python -m pip install -r requirements.txt
 ```
 
-依赖：`z3-solver`、`instructor`、`pydantic`、`pyyaml`、`pytest`。`openai` 由 instructor 拉取，`--use-llm` 需要它。
+依赖：`z3-solver`、`dd`、`instructor`、`pydantic`、`pyyaml`、`pytest`。`openai` 由 instructor 拉取，`--use-llm` 需要它。
 
 验证：
 
@@ -560,7 +566,7 @@ python -c "import z3; print(z3.get_version_string())"
 python -m pytest tests -q
 ```
 
-预期：**约 50 passed**（随测试增减以实际输出为准），耗时约 2–3 分钟。`pytest.ini` 已设 `testpaths = tests`，根目录 `_*.py` 垃圾文件不会被收集。
+预期：**pytest 全绿**（以实际输出为准），耗时约 2–3 分钟。`pytest.ini` 已设 `testpaths = tests`，根目录 `_*.py` 垃圾文件不会被收集。
 
 ## 4.3 CLI
 
@@ -587,8 +593,10 @@ python -m smt_completeness.cli --doc PATH --out DIR
 [报告] Markdown: ...
 [报告] JSON:     ...
 [产物] SMT-LIB:  ...
-[补全] 轮数=... 收敛=... 人工复核项=...
+[补全] 轮数=... 收敛=...
 [补全后报告] ...
+[补全需求] ...
+[最终 IR] ...
 ```
 
 ## 4.4 典型场景 A：用安全需求文档做全流程验收（推荐主路径）

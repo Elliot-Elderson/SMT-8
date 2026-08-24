@@ -12,11 +12,13 @@ def test_end_to_end_offline(tmp_path):
         use_llm=False,
         source_doc="Abstract_Access_Control_Requirements.md",
     )
-    before_md, before_js, _ = result["report_paths"]
-    after_md, after_js, _ = result["final_report_paths"]
+    before_md, before_js, before_smt = result["report_paths"]
+    after_md, after_js, after_smt = result["final_report_paths"]
     assert os.path.exists(before_md) and os.path.exists(after_md)
     assert os.path.exists(result["completed_requirements_path"])
     assert os.path.exists(result["final_ir_path"])
+    assert os.path.basename(before_smt) == "policy_before.smt2"
+    assert os.path.basename(after_smt) == "policy_after.smt2"
     before = json.loads(open(before_js, encoding="utf-8").read())
     after = json.loads(open(after_js, encoding="utf-8").read())
     assert "baseline" not in before
@@ -25,6 +27,17 @@ def test_end_to_end_offline(tmp_path):
     body = open(result["completed_requirements_path"], encoding="utf-8").read()
     assert "必须拒绝" in body
     assert after["coverage"]["v_unspecified"] <= before["coverage"]["v_unspecified"] or after["monotonicity"]["inversion_count"] <= before["monotonicity"]["inversion_count"]
+
+
+def test_rerun_into_same_out_dir(tmp_path):
+    out = str(tmp_path / "out")
+    for _ in range(2):
+        run_pipeline(
+            doc_path="smt_completeness/data/ir_openclaw.yaml",
+            out_dir=out,
+            complete=False,
+        )
+    assert os.path.exists(os.path.join(out, "report_before.md"))
 
 
 def test_main_returns_zero(tmp_path):

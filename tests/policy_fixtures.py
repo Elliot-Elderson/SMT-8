@@ -1,4 +1,4 @@
-from smt_completeness.ir import Condition, Policy, Priority, Provenance, Rule, RuleKind
+from smt_completeness.ir import Condition, Priority, Provenance, Rule, RuleKind
 from smt_completeness.vocab import Decision, Operation, ResourceClass, TargetZone
 
 

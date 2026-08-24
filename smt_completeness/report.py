@@ -164,15 +164,17 @@ def render_markdown(
         lines.append(_compare_row("V_explicit", before.coverage.v_explicit, after.coverage.v_explicit))
         lines.append(_compare_row("C3", before.consistency.overlap_count, after.consistency.overlap_count))
         lines.append(_compare_row("规则数", before.self_check.total_rules, after.self_check.total_rules))
+        lines.append("")
         if completion is not None:
             totals = _completion_totals(completion)
-            lines.append(_compare_row("轮次", totals["rounds"], totals["rounds"]))
-            lines.append(_compare_row("收敛", totals["converged"], totals["converged"]))
-            lines.append(_compare_row("added", totals["added"], totals["added"]))
-            lines.append(_compare_row("removed", totals["removed"], totals["removed"]))
-            lines.append(_compare_row("narrowed", totals["narrowed"], totals["narrowed"]))
-            lines.append(_compare_row("skipped", totals["skipped"], totals["skipped"]))
-        lines.append("")
+            lines.append("### 补全摘要\n")
+            lines.append(f"- 轮次：{totals['rounds']}")
+            lines.append(f"- 收敛：{totals['converged']}")
+            lines.append(f"- 新增规则：{totals['added']}")
+            lines.append(f"- 删除规则：{totals['removed']}")
+            lines.append(f"- 收窄规则：{totals['narrowed']}")
+            lines.append(f"- 跳过：{totals['skipped']}")
+            lines.append("")
 
     assumption_section = "## 7. 假设\n" if compare is not None else "## 6. 假设\n"
     lines.append(assumption_section)
@@ -183,17 +185,26 @@ def render_markdown(
     return "\n".join(lines)
 
 
-def write_policy_reports(policy: Policy, out_dir: str, stem: str) -> tuple[str, str, str]:
+def write_policy_reports(
+    policy: Policy,
+    out_dir: str,
+    stem: str,
+    report: "FullReport | None" = None,
+) -> tuple[str, str, str]:
     os.makedirs(out_dir, exist_ok=True)
-    report = build_report(policy)
+    # Always build internally so Z3 state is equivalent to the original call sequence.
+    # If the caller already has an analysed report, use that for file output so that
+    # the written MD and JSON come from the same analysis object.
+    built = build_report(policy)
+    used_report = report if report is not None else built
     md_path = os.path.join(out_dir, f"{stem}.md")
     json_path = os.path.join(out_dir, f"{stem}.json")
     smt_path = os.path.join(out_dir, f"policy_{stem}.smt2")
 
     with open(md_path, "w", encoding="utf-8") as f:
-        f.write(render_markdown(report, label=stem))
+        f.write(render_markdown(used_report, label=stem))
     with open(json_path, "w", encoding="utf-8") as f:
-        f.write(report.model_dump_json(indent=2))
+        f.write(used_report.model_dump_json(indent=2))
     export_smtlib(policy, smt_path)
 
     return md_path, json_path, smt_path
