@@ -1,134 +1,103 @@
+import z3
 from pydantic import BaseModel
 
-from ..compiler import is_default_allow
+from ..bdd_env import BDDEnv
+from ..compiler import find_witness
+from ..cubes import Cube, generalize
 from ..ir import Policy, RuleKind
-from ..state_space import State, all_states
-from ..vocab import ALL_FLAGS, Operation, ResourceClass, TargetZone
-
-
-class Cube(BaseModel):
-    operation: list[str]
-    resource_class: list[str]
-    target_zone: list[str]
-    flag_true: list[str]
-    flag_false: list[str]
-    size: int
+from ..state_space import State
 
 
 class CoverageReport(BaseModel):
     total: int
     v_explicit: int
-    v_danger: int
-    v_deferred: int
+    v_unspecified: int
+    v_unspecified_allow: int
+    v_unspecified_challenge: int
     v_explicit_ratio: float
-    v_danger_ratio: float
-    v_deferred_ratio: float
-    danger_cubes: list[Cube]
+    v_unspecified_ratio: float
+    v_unspecified_allow_ratio: float
+    v_unspecified_challenge_ratio: float
+    unspecified_cubes: list[Cube]
 
 
-def _any_rule_matches(policy: Policy, state: State) -> bool:
-    for kind in (RuleKind.MANDATORY_DENY, RuleKind.MUST_CHALLENGE, RuleKind.MAY_ALLOW):
-        if any(rule.condition.matches(state) for rule in policy.rules_of_kind(kind)):
-            return True
-    return False
+def _unspecified_constraint(blocked: list[State]):
+    def constraint(e):
+        any_rule = z3.Or(
+            e._kind_or(RuleKind.MANDATORY_DENY),
+            e._kind_or(RuleKind.MUST_CHALLENGE),
+            e._kind_or(RuleKind.MAY_ALLOW),
+        )
+        blocks = [z3.Not(e.state_eq(state)) for state in blocked]
+        return z3.And(z3.Not(any_rule), *blocks)
+
+    return constraint
 
 
-def generalize_cubes(states: list[State]) -> list[Cube]:
-    """Greedily generalize danger points by dropping literals when safe."""
-    point_set = set(states)
-    remaining = set(states)
+def _unspecified_cubes(policy: Policy, env: BDDEnv, target) -> list[Cube]:
+    seeds: list[State] = []
     cubes: list[Cube] = []
 
-    def cube_states(op, rc, tz, ftrue, ffalse):
-        ops = [op] if op is not None else list(Operation)
-        rcs = [rc] if rc is not None else list(ResourceClass)
-        tzs = [tz] if tz is not None else list(TargetZone)
-        free = [flag for flag in ALL_FLAGS if flag not in ftrue and flag not in ffalse]
-        result = []
-        for operation in ops:
-            for resource_class in rcs:
-                for target_zone in tzs:
-                    for mask in range(2 ** len(free)):
-                        flags = set(ftrue)
-                        for bit, flag in enumerate(free):
-                            if mask & (1 << bit):
-                                flags.add(flag)
-                        result.append(
-                            State(
-                                operation,
-                                resource_class,
-                                target_zone,
-                                frozenset(flags),
-                            )
-                        )
-        return result
+    for _ in range(16):
+        seed = find_witness(policy, _unspecified_constraint(seeds))
+        if seed is None:
+            break
+        seeds.append(seed)
+        cube = generalize(env, seed, target)
+        if cube is not None:
+            cubes.append(cube)
 
-    while remaining:
-        seed = next(iter(remaining))
-        op = seed.operation
-        rc = seed.resource_class
-        tz = seed.target_zone
-        ftrue = set(seed.flags)
-        ffalse = set(ALL_FLAGS) - set(seed.flags)
+    return _merge_containing_cubes(cubes)
 
-        for dim in ("operation", "resource_class", "target_zone"):
-            trial_op = None if dim == "operation" else op
-            trial_rc = None if dim == "resource_class" else rc
-            trial_tz = None if dim == "target_zone" else tz
-            block = cube_states(trial_op, trial_rc, trial_tz, ftrue, ffalse)
-            if all(state in point_set for state in block):
-                if dim == "operation":
-                    op = None
-                elif dim == "resource_class":
-                    rc = None
-                else:
-                    tz = None
 
-        for flag in list(ALL_FLAGS):
-            trial_ftrue = ftrue - {flag}
-            trial_ffalse = ffalse - {flag}
-            block = cube_states(op, rc, tz, trial_ftrue, trial_ffalse)
-            if all(state in point_set for state in block):
-                ftrue.discard(flag)
-                ffalse.discard(flag)
+def _merge_containing_cubes(cubes: list[Cube]) -> list[Cube]:
+    kept: list[Cube] = []
+    for cube in sorted(cubes, key=lambda item: item.size, reverse=True):
+        if any(_contains(existing, cube) for existing in kept):
+            continue
+        kept = [existing for existing in kept if not _contains(cube, existing)]
+        kept.append(cube)
+    return kept
 
-        covered = cube_states(op, rc, tz, ftrue, ffalse)
-        remaining -= set(covered)
-        cubes.append(
-            Cube(
-                operation=[op.value] if op else [],
-                resource_class=[rc.value] if rc else [],
-                target_zone=[tz.value] if tz else [],
-                flag_true=sorted(ftrue),
-                flag_false=sorted(ffalse),
-                size=len(covered),
-            )
-        )
 
-    return cubes
+def _contains(outer: Cube, inner: Cube) -> bool:
+    return (
+        _dimension_contains(outer.operation, inner.operation)
+        and _dimension_contains(outer.resource_class, inner.resource_class)
+        and _dimension_contains(outer.target_zone, inner.target_zone)
+        and set(outer.flag_true).issubset(inner.flag_true)
+        and set(outer.flag_false).issubset(inner.flag_false)
+    )
+
+
+def _dimension_contains(outer: list[str], inner: list[str]) -> bool:
+    if not outer:
+        return True
+    if not inner:
+        return False
+    return set(inner).issubset(outer)
 
 
 def check_coverage(policy: Policy) -> CoverageReport:
-    explicit = 0
-    danger_states: list[State] = []
-    deferred = 0
+    env = BDDEnv(policy)
+    valid = env.valid
+    any_match = env.any_match()
+    unspecified = valid & ~any_match
+    explicit = env.count(valid & any_match)
+    unspecified_count = env.count(unspecified)
+    unspecified_allow = env.count(unspecified & env.default_allow())
+    unspecified_challenge = unspecified_count - unspecified_allow
+    total = env.count(valid)
 
-    for state in all_states():
-        if _any_rule_matches(policy, state):
-            explicit += 1
-        elif is_default_allow(state):
-            danger_states.append(state)
-        else:
-            deferred += 1
-
-    total = explicit + len(danger_states) + deferred
     return CoverageReport(
         total=total,
         v_explicit=explicit,
-        v_danger=len(danger_states),
-        v_deferred=deferred,
+        v_unspecified=unspecified_count,
+        v_unspecified_allow=unspecified_allow,
+        v_unspecified_challenge=unspecified_challenge,
         v_explicit_ratio=explicit / total,
-        v_danger_ratio=len(danger_states) / total,
-        v_deferred_ratio=deferred / total,
-        danger_cubes=generalize_cubes(danger_states),
+        v_unspecified_ratio=unspecified_count / total,
+        v_unspecified_allow_ratio=unspecified_allow / total,
+        v_unspecified_challenge_ratio=unspecified_challenge / total,
+        unspecified_cubes=_unspecified_cubes(policy, env, unspecified),
     )
