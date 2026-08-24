@@ -4,7 +4,8 @@
 >
 > 本文以**仓库里实际代码与一次真实离线跑分为准**，不是抽象设计稿的复述。配套材料：
 >
-> - 设计：`docs/superpowers/specs/2026-08-18-smt-completeness-checker-mvp-design.md`
+> - 设计（初版）：`docs/superpowers/specs/2026-08-18-smt-completeness-checker-mvp-design.md`
+> - 设计（反例驱动补全）：`docs/superpowers/specs/2026-08-24-counterexample-driven-completion-design.md`
 > - 调研：`docs/research/01-formal-methods-survey.md`、`02-toolchain-selection.md`、`03-threat-baseline.md`
 > - 输入样例：`Abstract_Access_Control_Requirements.md`
 > - 代码包：`smt_completeness/`
@@ -13,7 +14,7 @@
 
 ## 0. 十分钟速览
 
-把一份**自然语言写的 Agent 访问控制需求**，变成一份**可解释的完备性评测**，并可选地**单调收紧**默认放行区。
+把一份**自然语言写的 Agent 访问控制需求**，变成一份**可解释的完备性评测**，并可选地**单调收紧**未表态区（unspecified）。
 
 ```
 需求文档（或离线 YAML IR）
@@ -23,14 +24,19 @@
         │
         ├── 自动自检（id 唯一、规则非恒假）
         ├── Python 判定函数 D(s) ∈ {Allow=0, Challenge=1, Deny=2}
-        ├── Z3 编码 + 导出 policy.smt2
-        ├── 五项内部分析 + 外部威胁基线
+        ├── Z3 + BDD 编码 + 导出 policy_before.smt2
+        ├── 五项内部分析（一致、冗余、未表态三分区、H1、敏感度偏序）
         ▼
-   report.md / report.json / policy.smt2
-        │  （可选闭环）
+   report_before.md / report_before.json / policy_before.smt2
+        │  （可选闭环 --complete，默认开启）
         ▼
-   把「默认 Allow」危险面合成新拒绝规则
-   验证 ∀s D'(s) ≥ D(s) 后复评 → after_completion/
+   run_completion：反例驱动三阶段
+     hygiene → 倒挂对齐 → 未表态显式化
+   验证 ∀s D'(s) ≥ D(s)（Z3 单调性门控）
+        ▼
+   report_after.md（含补全前后对照）/ report_after.json / policy_after.smt2
+   final_ir.yaml（最终 Policy IR）
+   completed_requirements.md（源文档 + NL 差量标注）
 ```
 
 **你拿到的不是「证明绝对最安全」**，而是一组**可复算的指标 + 反例 + 两类缺口**（补规则能修 vs 当前词表根本表达不了）。
@@ -47,7 +53,7 @@ python -m pytest tests -q
 python -m smt_completeness.cli --doc smt_completeness/data/ir_openclaw.yaml --out out --no-complete
 ```
 
-然后打开 `out/report.md`。全流程含补全时去掉 `--no-complete`，大约一两分钟。
+然后打开 `out/report_before.md`。全流程含补全时去掉 `--no-complete`，大约一两分钟。
 
 ---
 
@@ -67,18 +73,17 @@ python -m smt_completeness.cli --doc smt_completeness/data/ir_openclaw.yaml --ou
 | --- | --- | --- |
 | 规则自己打架吗？ | 同一行为既禁止又要求「再判断」 | C3：mandatory_deny ∩ must_challenge 的状态数与反例 |
 | 有没有写了等于没写的规则？ | 删掉某条，策略完全不变 | C4：贪心固化后的冗余 id |
-| 还有没有系统自动放行的洞？ | 没写规则时默认 Allow | C2：`V_danger` + 可读 cube |
+| 还有没有未显式表态的区域？ | 没写规则时默认 Allow 或默认 Challenge | C2：`V_unspecified`（`v_unspecified_allow` + `v_unspecified_challenge`）+ 可读 cube |
 | 还能不能把某条规则再收紧一级？ | 过度授权 | C1 / H1：可收紧规则列表 |
 | 高敏感资源会不会比低敏感更宽松？ | 文档 §2.3 自己承认的不对称 | 敏感度单调性 |
-| **还缺哪些方面？** | 对照 OWASP / MITRE 后的漏项 | 威胁覆盖率 + 需求缺失 / 词表缺失 |
 
 ## 1.2 它不是什么
 
 - **不是**运行时拦截器（不挂钩真实工具调用）。
 - **不是**「文档已经实现了」的证明（没有策略图、没有日志、没有 golden case）。
 - **不是**绝对最紧证明。H1 只搜索「把某条规则结论上调一级」，不搜索重写条件、新增切割维度。
-- **不是**把 120 条威胁库全跑完的产品；demo 种子表是 **18 条**，结构与调研文档一致，可按同样 YAML 扩充。
-- Demo **没有人工审核 UI**：抽取默认 `auto_approved`；补全失败只把待办写进结果对象。
+- **不是**把 120 条威胁库全跑完的产品；威胁基线（`threats/baseline.py`）是可选保留模块，报告主路径不再强制输出外部威胁对照节。
+- Demo **没有人工审核 UI**：抽取默认 `auto_approved`；补全门控基于 Z3 单调性验证，无法通过则跳过。
 
 ## 1.3 在完整系统里的位置
 
@@ -99,10 +104,14 @@ OpenClaw 原文：`Abstract_Access_Control_Requirements.md`。离线 fixture 是
 
 | 文件 | 作用 |
 | --- | --- |
-| `out/report.md` | 给人读的评测报告 |
-| `out/report.json` | 给脚本/二次分析的结构化同一套数字 |
-| `out/policy.smt2` | 判定函数的 SMT-LIB，可供第三方求解器复核 |
-| `out/after_completion/` | 仅当未加 `--no-complete`：补全后再评测的三件套 |
+| `out/report_before.md` | 给人读的补全前评测报告 |
+| `out/report_before.json` | 给脚本/二次分析的结构化数字（无 baseline 字段） |
+| `out/policy_before.smt2` | 补全前判定函数的 SMT-LIB |
+| `out/report_after.md` | 补全后报告，含前后对照表（未加 `--no-complete`） |
+| `out/report_after.json` | 补全后结构化数字 |
+| `out/policy_after.smt2` | 补全后判定函数的 SMT-LIB |
+| `out/final_ir.yaml` | 最终 Policy IR（YAML） |
+| `out/completed_requirements.md` | 源文档 + NL 差量标注（必须拒绝 / 进一步判断补全追加） |
 
 ## 1.5 代码结构（按数据流）
 
@@ -134,8 +143,8 @@ tests/                  pytest，testpaths=tests（见 pytest.ini）
 
 1. `extract` → `Policy`
 2. `self_check`，失败则 `ValueError`
-3. `write_reports`（内部依次跑五项分析 + 威胁基线）
-4. 若 `complete=True`：`run_completion`，再对 `final_policy` 写 `after_completion/`
+3. `build_report(policy)` → 写 `report_before.*` + `policy_before.smt2`
+4. 若 `complete=True`：`run_completion` → `build_report(final)` → 写 `report_after.*`（md 含对照）、`policy_after.smt2`、`final_ir.yaml`；读源文档 → `apply_nl_patch` → `completed_requirements.md`
 
 ## 1.6 技术栈：为什么是这些组件
 
@@ -450,7 +459,7 @@ Agent 运行时防护（AgentSpec, Progent, CaMeL）——通常不做「需求�
 
 先读 **Markdown** 建立图景，用 **JSON** 做断言或画图，用 **SMT-LIB** 在 Z3 里独立检查判定函数是否可解析。三者由同一次 `build_report` 生成，数字应一致。
 
-## 3.2 `report.md` 逐节
+## 3.2 `report_before.md` / `report_after.md` 逐节
 
 ### §1 概览
 
@@ -459,13 +468,13 @@ Agent 运行时防护（AgentSpec, Progent, CaMeL）——通常不做「需求�
 
 ### §2 三分区体积（C2）——最先看
 
-关注 **V_danger**。非零就表示存在「没规则、系统自动放行」。其下 cube：
+关注 **V_unspecified**（`v_unspecified_allow` + `v_unspecified_challenge`）。其中 `v_unspecified_allow` 非零表示存在「没规则、系统自动放行」的默认 Allow 盲区。其下 cube：
 
 - 空列表打印为 `*`（通配）
 - `flag_true` / `flag_false` 是必须真/必须假
-- `dc=` 才是 don’t-care 的 flag（两列表都未出现的）
+- `dc=` 才是 don't-care 的 flag（两列表都未出现的）
 
-早期 `_demo_out/report.md` 曾把 `flag_false` 误标成 don’t-care，**当前代码已改正**。请以新跑的 `out/report.md` 为准。
+早期 `_demo_out/report.md` 曾把 `flag_false` 误标成 don't-care，**当前代码已改正**。请以新跑的 `out/report_before.md` 为准。
 
 ### §3 一致性与冗余
 
@@ -481,30 +490,24 @@ Agent 运行时防护（AgentSpec, Progent, CaMeL）——通常不做「需求�
 
 倒挂/不对称的「高 / 低」是两个只差 `resource_class` 的状态。`D=` 为 0/1/2。优先看 memory vs private_context。
 
-### §6 威胁基线——回答「还缺哪些方面」
+### §6 补全前后对照（仅 report_after.md）
 
-- 覆盖率分母是种子条数（18），不是 120。
-- **需求缺失**：有反例五元组，可考虑加规则。
-- **词表缺失**：加规则没用，要加观察维度（输出内容、docker.sock 资源类、跨会话等）。
-
-### §7 threats to validity
-
-不是客套话，是结论的边界。对外汇报必须带上。
-
+出现于 `report_after.md`，标题为「补全前后对照」。可看倒挂数、V_unspecified、规则数等指标的 before→after 变化。外部威胁基线对照不再作为必出节；`threats/baseline.py` 保留为可选模块，可独立调用。
 ## 3.3 `report.json` 字段地图
 
-顶层：`self_check`、`consistency`、`redundancy`、`coverage`、`tightening`、`monotonicity`、`baseline`、`assumptions`。
+顶层：`self_check`、`consistency`、`redundancy`、`coverage`、`tightening`、`monotonicity`、`assumptions`。
+（无 `baseline` 字段；威胁基线不再作为必出节。）
 
 常用：
 
-- `coverage.v_danger`、`coverage.danger_cubes`
+- `coverage.v_unspecified`、`coverage.v_unspecified_allow`、`coverage.unspecified_cubes`
 - `consistency.overlap_count`、`example_state`、`deny_rule_ids`
 - `tightening.tightenable_rule_ids`、`is_h1_tight`
-- `baseline.coverage_ratio`、`baseline.gaps[].kind`
+- `monotonicity.inversion_count`、`equal_rank_asymmetry_count`
 
-脚本示例：比较补全前后 `coverage.v_danger` 应 `after <= before`（e2e 测试即如此）。
+脚本示例：比较补全前后 `coverage.v_unspecified` 应 `after <= before`（e2e 测试即如此）。
 
-## 3.4 `policy.smt2`
+## 3.4 `policy_before.smt2` / `policy_after.smt2`
 
 UTF-8 文本，含 `Allow=0, Challenge=1, Deny=2` 注释。用 Z3 打开应能解析。它编码的是**当前 Policy 的 D**，不是自然语言全文。
 
@@ -513,10 +516,9 @@ UTF-8 文本，含 `Allow=0, Challenge=1, Deny=2` 注释。用 Z3 打开应能�
 | 项 | 补全前 | 补全后 |
 | --- | --- | --- |
 | 规则数 | 24 | 32 |
-| V_danger | 8 | 0 |
-| V_deferred | 1444 | 1444 |
-| 威胁覆盖 | 12/18 | 13/18 |
-| TINV-CRED-18 | 仍缺口 | 仍缺口 |
+| V_unspecified_allow | 8 | 0 |
+| V_unspecified_challenge | 1444 | 1444 |
+| 倒挂数 | >0 | 减少 |
 | 同级不对称 | 64 | 62（记忆读被部分收紧） |
 
 **阅读结论示例（可作汇报口径）**：
@@ -572,10 +574,12 @@ python -m smt_completeness.cli --doc PATH --out DIR
 | --- | --- |
 | `--doc` | YAML IR，或 `--use-llm` 时的 Markdown |
 | `--out` | 输出目录，默认 `out`（已 gitignore） |
-| `--no-complete` | 只报告，不跑危险面补全 |
+| `--no-complete` | 只报告，不跑补全闭环 |
 | `--use-llm` | instructor 抽取 |
 | `--llm-provider` | `openai`（默认，`OPENAI_API_KEY`）或 `deepseek`（`DEEPSEEK_API_KEY`，`https://api.deepseek.com`） |
 | `--llm-model` | 覆盖默认：`gpt-4o` / `deepseek-chat`；DeepSeek 推理可用 `deepseek-reasoner` |
+| `--source-doc` | 源需求文档路径（默认 `Abstract_Access_Control_Requirements.md`），用于 NL 补丁输出 |
+| `--polish-nl` | 保留选项，当前忽略 |
 
 成功时 stdout：
 
@@ -607,13 +611,12 @@ python -m smt_completeness.cli --doc smt_completeness/data/ir_openclaw.yaml --ou
 
 **验收清单**
 
-- [ ] 生成 `out/report.md`、`out/report.json`、`out/policy.smt2`
+- [ ] 生成 `out/report_before.md`、`out/report_before.json`、`out/policy_before.smt2`
 - [ ] 概览规则数 = 24，自检通过
-- [ ] `coverage.total == 122880`，三分区之和等于 total
-- [ ] `baseline.total == 18`
-- [ ] 报告含 A1–A7
-- [ ] 能在 §6 找到 TINV-CRED-18（需求缺失）与 TINV-EXFIL-07（词表缺失）
+- [ ] `coverage.total == 122880`，v_explicit + v_unspecified = total
+- [ ] 报告含 A1–A8
 - [ ] §5 能看到 agent_memory vs agent_private_context
+- [ ] 报告 JSON 无 `baseline` 字段
 
 对照原文：`Abstract_Access_Control_Requirements.md` §3.1 禁读凭据、§2.3 记忆与上下文分离、§9 内容级授权未入长期策略。
 
@@ -625,10 +628,10 @@ python -m smt_completeness.cli --doc smt_completeness/data/ir_openclaw.yaml --ou
 
 **验收清单**
 
-- [ ] 另有 `out/after_completion/report.md`（及 json/smt2）
-- [ ] 补全后 `v_danger` ≤ 补全前（常见 8 → 0）
-- [ ] 收敛或 `待人工介入` 非空时去读 `CompletionResult`（当前 CLI 只打印计数）
-- [ ] 凭据写入缺口**仍然存在**（证明补全只关默认 Allow，符合实现）
+- [ ] 另有 `out/report_after.md`（及 json/smt2）、`out/final_ir.yaml`、`out/completed_requirements.md`
+- [ ] `report_after.md` 含「补全前后对照」节
+- [ ] 补全后 `v_unspecified_allow` ≤ 补全前（常见 8 → 0）
+- [ ] `completed_requirements.md` 含「必须拒绝」补全追加内容
 
 ### A3. 从自然语言抽取（可选，需密钥）
 
@@ -648,7 +651,7 @@ python -m smt_completeness.cli --doc Abstract_Access_Control_Requirements.md --o
 
 **预期与注意**
 
-- 抽取结果**不必**等于 24 条 fixture；词表封闭，非法 flag 会重试最多 3 次。
+- 抽取结果**不必**等于 24 条 fixture；词表封闭，非法 flag 会重试最多 3 次。`out-ds/` 不是金标准——DeepSeek 与 OpenAI 对同一文档的抽取可能相差数条规则，需人工复核。
 - 先 `--no-complete` 检查自检与规则是否离谱，再决定是否补全。
 - 费用与稳定性取决于模型；失败见 4.8。
 - 不要把 Markdown 路径在**不带** `--use-llm` 时传入——会报错（故意的）。

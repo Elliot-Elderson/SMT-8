@@ -22,6 +22,7 @@ def _flag_subsets() -> Iterator[frozenset]:
 
 
 def all_states() -> Iterator[State]:
+    # 调试专用：完整枚举 122880 个合法状态。生产代码禁止调用（改用 BDDEnv / Z3 分析）。
     for op, rc, tz, flags in product(
         Operation, ResourceClass, TargetZone, _flag_subsets()
     ):

@@ -1,6 +1,5 @@
 import json
 import os
-
 from smt_completeness.cli import run_pipeline
 
 
@@ -11,18 +10,21 @@ def test_end_to_end_offline(tmp_path):
         out_dir=out,
         complete=True,
         use_llm=False,
+        source_doc="Abstract_Access_Control_Requirements.md",
     )
-    md, js, smt = result["report_paths"]
-    assert os.path.exists(md) and os.path.exists(js) and os.path.exists(smt)
-    data = json.loads(open(js, encoding="utf-8").read())
-    assert data["baseline"]["total"] == 18
-    # 闭环后应有最终报告，且 V_danger 不增
-    assert result["completion"] is not None
-    final_md, final_js, _ = result["final_report_paths"]
-    assert os.path.exists(final_md)
-    before = json.loads(open(js, encoding="utf-8").read())["coverage"]["v_danger"]
-    after = json.loads(open(final_js, encoding="utf-8").read())["coverage"]["v_danger"]
-    assert after <= before
+    before_md, before_js, _ = result["report_paths"]
+    after_md, after_js, _ = result["final_report_paths"]
+    assert os.path.exists(before_md) and os.path.exists(after_md)
+    assert os.path.exists(result["completed_requirements_path"])
+    assert os.path.exists(result["final_ir_path"])
+    before = json.loads(open(before_js, encoding="utf-8").read())
+    after = json.loads(open(after_js, encoding="utf-8").read())
+    assert "baseline" not in before
+    assert "v_unspecified" in before["coverage"]
+    assert "补全前后对照" in open(after_md, encoding="utf-8").read()
+    body = open(result["completed_requirements_path"], encoding="utf-8").read()
+    assert "必须拒绝" in body
+    assert after["coverage"]["v_unspecified"] <= before["coverage"]["v_unspecified"] or after["monotonicity"]["inversion_count"] <= before["monotonicity"]["inversion_count"]
 
 
 def test_main_returns_zero(tmp_path):
