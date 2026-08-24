@@ -35,7 +35,7 @@ def _find_pair_examples(
 ) -> list[tuple[State, State, int, int]]:
     """Collect up to max_examples (s1, s2, D1, D2) pairs via Z3 blocking clauses."""
     env = Z3Env(policy)
-    rc2 = z3.Const("smtc_rc2_mono", env.rc_sort)
+    rc2 = z3.Const(f"{env.rc.decl().name()}_pair", env.rc_sort)
 
     D1 = env.decision_expr(policy)
     D2 = z3.substitute(D1, (env.rc, rc2))

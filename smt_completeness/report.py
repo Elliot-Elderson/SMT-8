@@ -192,11 +192,7 @@ def write_policy_reports(
     report: "FullReport | None" = None,
 ) -> tuple[str, str, str]:
     os.makedirs(out_dir, exist_ok=True)
-    # Always build internally so Z3 state is equivalent to the original call sequence.
-    # If the caller already has an analysed report, use that for file output so that
-    # the written MD and JSON come from the same analysis object.
-    built = build_report(policy)
-    used_report = report if report is not None else built
+    used_report = report if report is not None else build_report(policy)
     md_path = os.path.join(out_dir, f"{stem}.md")
     json_path = os.path.join(out_dir, f"{stem}.json")
     smt_path = os.path.join(out_dir, f"policy_{stem}.smt2")
