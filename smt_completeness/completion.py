@@ -216,6 +216,10 @@ def _align_kind_for_cube(cube: Cube, policy: Policy) -> RuleKind:
         # Wildcard op: skip align, use Challenge
         return RuleKind.MUST_CHALLENGE
 
+    if not cube.target_zone:
+        # Wildcard zone: skip align rather than spreading a local-only Deny.
+        return RuleKind.MUST_CHALLENGE
+
     if not cube.resource_class:
         # Wildcard rc: cannot align; use Challenge (never Deny all-rc)
         return RuleKind.MUST_CHALLENGE
@@ -225,20 +229,32 @@ def _align_kind_for_cube(cube: Cube, policy: Policy) -> RuleKind:
     if cube_rank is None:
         return RuleKind.MUST_CHALLENGE
 
-    op = Operation(cube.operation[0])
-    tz = TargetZone(cube.target_zone[0]) if cube.target_zone else TargetZone.LOCAL
     flags = frozenset(cube.flag_true)
 
-    max_d: int = int(Decision.ALLOW)
-    for rc in ResourceClass:
-        rc_rank = sensitivity_rank(rc)
-        if rc_rank is not None and rc_rank >= cube_rank:
-            seed = State(op, rc, tz, flags)
-            d = int(decide_py(seed, policy))
-            if d > max_d:
-                max_d = d
+    def _slice_max_d(op: Operation, tz: TargetZone) -> int:
+        max_d: int = int(Decision.ALLOW)
+        for rc in ResourceClass:
+            rc_rank = sensitivity_rank(rc)
+            if rc_rank is not None and rc_rank >= cube_rank:
+                seed = State(op, rc, tz, flags)
+                d = int(decide_py(seed, policy))
+                if d > max_d:
+                    max_d = d
+        return max_d
 
-    if max_d == int(Decision.DENY):
+    ops = [Operation(value) for value in cube.operation]
+    zones = [TargetZone(value) for value in cube.target_zone]
+
+    if len(ops) > 1 or len(zones) > 1:
+        if all(
+            _slice_max_d(op, tz) == int(Decision.DENY)
+            for op in ops
+            for tz in zones
+        ):
+            return RuleKind.MANDATORY_DENY
+        return RuleKind.MUST_CHALLENGE
+
+    if _slice_max_d(ops[0], zones[0]) == int(Decision.DENY):
         return RuleKind.MANDATORY_DENY
     return RuleKind.MUST_CHALLENGE
 
@@ -252,7 +268,7 @@ def _covers_default_allow(cube: Cube) -> bool:
     if cube.flag_true:
         # Requires a flag — DefaultAllow has no flags
         return False
-    if cube.operation and not set(cube.operation).issubset({"read", "list"}):
+    if cube.operation and not (set(cube.operation) & {"read", "list"}):
         return False
     if cube.target_zone and "local" not in cube.target_zone:
         return False
@@ -325,6 +341,17 @@ def run_completion(policy: Policy, max_rounds: int = 5) -> CompletionResult:
         # Phase 3: Unspecified coverage
         current, unspec_added, unspec_skipped = _unspecified_phase(current, i, seq)
 
+        monotone_ok = is_monotone(policy_at_start, current)
+        added_ids = inv_added + unspec_added
+        skipped_ids = hygiene_skipped + inv_skipped + unspec_skipped
+
+        if not monotone_ok:
+            skipped_ids = skipped_ids + removed_ids + narrowed_ids + added_ids
+            current = policy_at_start
+            removed_ids = []
+            narrowed_ids = []
+            added_ids = []
+
         cov_after = check_coverage(current)
         mono_after = check_monotonicity(current)
         v_unspec_after = cov_after.v_unspecified
@@ -337,11 +364,11 @@ def run_completion(policy: Policy, max_rounds: int = 5) -> CompletionResult:
                 v_unspecified_after=v_unspec_after,
                 inversion_count_before=inv_before,
                 inversion_count_after=inv_after,
-                added_rule_ids=inv_added + unspec_added,
+                added_rule_ids=added_ids,
                 removed_rule_ids=removed_ids,
                 narrowed_rule_ids=narrowed_ids,
-                skipped=hygiene_skipped + inv_skipped + unspec_skipped,
-                monotone_ok=is_monotone(policy_at_start, current),
+                skipped=skipped_ids,
+                monotone_ok=monotone_ok,
             )
         )
 

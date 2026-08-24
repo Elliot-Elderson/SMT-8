@@ -1,9 +1,22 @@
 from smt_completeness.analysis.monotonicity import check_monotonicity
 from smt_completeness.compiler import is_monotone, preserves_mustallow
-from smt_completeness.completion import run_completion
+from smt_completeness.completion import _covers_default_allow, run_completion
+from smt_completeness.cubes import Cube
 from smt_completeness.ir import Policy, Provenance, RuleKind
 from smt_completeness.vocab import ResourceClass
 from tests.policy_fixtures import deny_read_private_context
+
+
+def test_mixed_op_cube_covers_default_allow():
+    cube = Cube(
+        operation=["read", "write"],
+        resource_class=["normal_file"],
+        target_zone=["local"],
+        flag_true=[],
+        flag_false=[],
+        size=0,
+    )
+    assert _covers_default_allow(cube) is True
 
 
 def test_completion_aligns_memory_not_deny_default_allow():
