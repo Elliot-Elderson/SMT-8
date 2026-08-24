@@ -1,8 +1,7 @@
 from pydantic import BaseModel
 
-from ..compiler import decide_py, must_allow
+from ..compiler import preserves_mustallow
 from ..ir import Policy, RuleKind
-from ..state_space import all_states
 from ..vocab import Decision
 
 
@@ -30,7 +29,6 @@ def _raise_rule(policy: Policy, rule_id: str) -> Policy:
 
 def check_tightening(policy: Policy) -> TighteningReport:
     """spec §5.4 H1: a rule is tightenable if raising it preserves MustAllow."""
-    mustallow_states = [state for state in all_states() if must_allow(state, policy)]
     tightenable_rule_ids: list[str] = []
     witnessed_rule_ids: list[str] = []
 
@@ -41,14 +39,10 @@ def check_tightening(policy: Policy) -> TighteningReport:
             continue
 
         raised_policy = _raise_rule(policy, rule.id)
-        breaks_mustallow = any(
-            decide_py(state, raised_policy) != Decision.ALLOW
-            for state in mustallow_states
-        )
-        if breaks_mustallow:
-            witnessed_rule_ids.append(rule.id)
-        else:
+        if preserves_mustallow(policy, raised_policy):
             tightenable_rule_ids.append(rule.id)
+        else:
+            witnessed_rule_ids.append(rule.id)
 
     return TighteningReport(
         tightenable_rule_ids=tightenable_rule_ids,

@@ -78,3 +78,9 @@ def test_state_to_dict_roundtrip_keys():
     assert d["operation"] == "read"
     assert d["resource_class"] == "credential"
     assert d["flags"] == ["destructive"]
+
+
+def test_consistency_module_has_no_all_states():
+    from smt_completeness.analysis import consistency as m
+
+    assert "all_states" not in open(m.__file__, encoding="utf-8").read()

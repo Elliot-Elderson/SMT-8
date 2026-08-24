@@ -28,3 +28,9 @@ def test_offline_policy_tightening_runs():
     rep = check_tightening(load_offline_ir())
     assert isinstance(rep.is_h1_tight, bool)
     assert isinstance(rep.tightenable_rule_ids, list)
+
+
+def test_tightening_module_has_no_all_states():
+    from smt_completeness.analysis import tightening as m
+
+    assert "all_states" not in open(m.__file__, encoding="utf-8").read()

@@ -1,8 +1,7 @@
 from pydantic import BaseModel
 
-from ..compiler import decide_py
+from ..compiler import policies_equivalent
 from ..ir import Policy
-from ..state_space import all_states
 
 
 class RedundancyReport(BaseModel):
@@ -11,10 +10,7 @@ class RedundancyReport(BaseModel):
 
 
 def _policy_equivalent(a: Policy, b: Policy) -> bool:
-    for state in all_states():
-        if decide_py(state, a) != decide_py(state, b):
-            return False
-    return True
+    return policies_equivalent(a, b)
 
 
 def check_redundancy(policy: Policy) -> RedundancyReport:

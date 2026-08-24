@@ -38,3 +38,9 @@ def test_offline_policy_redundancy_runs():
     rep = check_redundancy(load_offline_ir())
     assert rep.total_rules == 24
     assert isinstance(rep.redundant_rule_ids, list)
+
+
+def test_redundancy_module_has_no_all_states():
+    from smt_completeness.analysis import redundancy as m
+
+    assert "all_states" not in open(m.__file__, encoding="utf-8").read()
