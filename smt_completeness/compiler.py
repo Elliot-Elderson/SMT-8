@@ -82,7 +82,7 @@ class Z3Env:
         self.rc = z3.Const(f"{prefix}_rc", self.rc_sort)
         self.tz = z3.Const(f"{prefix}_tz", self.tz_sort)
         self.flag = {name: z3.Bool(f"{prefix}_flag_{name}") for name in ALL_FLAGS}
-        self.D = self._build_decision_expr()
+        self.D = self.decision_expr(self.policy)
         self.solver = z3.Solver()
 
     def _match_expr(self, rule: Rule) -> z3.BoolRef:
@@ -130,16 +130,17 @@ class Z3Env:
         local = self.tz == self._tz_map[TargetZone.LOCAL.value]
         return z3.And(no_flags, read_or_list, local)
 
-    def _kind_or(self, kind: RuleKind) -> z3.BoolRef:
-        rules = self.policy.rules_of_kind(kind)
+    def _kind_or(self, kind: RuleKind, policy: Policy | None = None) -> z3.BoolRef:
+        policy = policy or self.policy
+        rules = policy.rules_of_kind(kind)
         if not rules:
             return z3.BoolVal(False)
         return z3.Or([self._match_expr(rule) for rule in rules])
 
-    def _build_decision_expr(self) -> z3.ArithRef:
-        deny = self._kind_or(RuleKind.MANDATORY_DENY)
-        challenge = self._kind_or(RuleKind.MUST_CHALLENGE)
-        allow = self._kind_or(RuleKind.MAY_ALLOW)
+    def decision_expr(self, policy: Policy) -> z3.ArithRef:
+        deny = self._kind_or(RuleKind.MANDATORY_DENY, policy)
+        challenge = self._kind_or(RuleKind.MUST_CHALLENGE, policy)
+        allow = self._kind_or(RuleKind.MAY_ALLOW, policy)
         return z3.If(
             deny,
             int(Decision.DENY),
@@ -199,6 +200,40 @@ def find_witness(policy: Policy, constraint: Callable[[Z3Env], z3.BoolRef]) -> S
         env.solver.pop()
     env.solver.pop()
     return witness
+
+
+def policies_equivalent(a: Policy, b: Policy) -> bool:
+    return find_decision_diff(a, b) is None
+
+
+def find_decision_diff(a: Policy, b: Policy) -> State | None:
+    env = build_env(a)
+    env.solver.add(env.decision_expr(a) != env.decision_expr(b))
+    if env.solver.check() != z3.sat:
+        return None
+    return env.model_to_state(env.solver.model())
+
+
+def is_monotone(old: Policy, new: Policy) -> bool:
+    env = build_env(old)
+    env.solver.add(env.decision_expr(new) < env.decision_expr(old))
+    return env.solver.check() == z3.unsat
+
+
+def preserves_mustallow(old: Policy, new: Policy) -> bool:
+    env = build_env(old)
+    hits_floor = env._kind_or(RuleKind.MAY_ALLOW)
+    hits_ceil = env._kind_or(RuleKind.MANDATORY_DENY)
+    hits_chal = env._kind_or(RuleKind.MUST_CHALLENGE)
+    must = z3.And(hits_floor, z3.Not(hits_ceil), z3.Not(hits_chal))
+    env.solver.add(must, env.decision_expr(new) != int(Decision.ALLOW))
+    return env.solver.check() == z3.unsat
+
+
+def is_vacuous(policy: Policy, rule: Rule) -> bool:
+    env = build_env(policy)
+    env.solver.add(env.match_expr(rule))
+    return env.solver.check() == z3.unsat
 
 
 def export_smtlib(policy: Policy, path: str) -> None:
