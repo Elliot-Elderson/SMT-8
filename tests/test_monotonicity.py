@@ -17,3 +17,15 @@ def test_offline_finds_context_vs_memory_asymmetry():
 def test_no_strict_inversion_is_reported_cleanly():
     rep = check_monotonicity(load_offline_ir())
     assert rep.inversion_count >= 0
+
+
+def test_monotonicity_module_has_no_all_states():
+    from smt_completeness.analysis import monotonicity as m
+    assert "all_states" not in open(m.__file__, encoding="utf-8").read()
+
+
+def test_asymmetric_pair_on_tiny_policy():
+    from smt_completeness.ir import Policy
+    from tests.policy_fixtures import deny_read_private_context
+    rep = check_monotonicity(Policy(rules=[deny_read_private_context()]))
+    assert rep.equal_rank_asymmetry_count > 0
