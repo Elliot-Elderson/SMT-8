@@ -196,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not args.doc and not args.from_ir:
-        print("[错误] --doc is required unless --from-ir is provided")
+        print("[错误] 缺少 --doc；除非提供 --from-ir")
         return 2
     if args.from_ir and args.use_llm:
         print("[错误] --from-ir 不能与 --use-llm 同时使用")
