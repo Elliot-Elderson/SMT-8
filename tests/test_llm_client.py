@@ -3,6 +3,7 @@ import os
 import pytest
 
 from smt_completeness.llm_client import (
+    instructor_mode,
     list_providers,
     openai_client_kwargs,
     resolve_model,
@@ -38,6 +39,13 @@ def test_openai_client_kwargs_openai_default_base(monkeypatch):
     kwargs = openai_client_kwargs("openai")
     assert kwargs["api_key"] == "sk-test-openai"
     assert "base_url" not in kwargs
+
+
+def test_instructor_mode_deepseek_uses_json():
+    import instructor
+
+    assert instructor_mode("deepseek") == instructor.Mode.JSON
+    assert instructor_mode("openai") == instructor.Mode.TOOLS
 
 
 def test_openai_client_kwargs_missing_key(monkeypatch):

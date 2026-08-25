@@ -56,9 +56,21 @@ def openai_client_kwargs(provider: str) -> dict[str, Any]:
     return kwargs
 
 
+def instructor_mode(provider: str):
+    """DeepSeek does not fill OpenAI tool calls; JSON mode is required."""
+    import instructor
+
+    if provider == "deepseek":
+        return instructor.Mode.JSON
+    return instructor.Mode.TOOLS
+
+
 def build_instructor_client(provider: str = "openai"):
     """Return an instructor-patched OpenAI-compatible client."""
     import instructor
     from openai import OpenAI
 
-    return instructor.from_openai(OpenAI(**openai_client_kwargs(provider)))
+    return instructor.from_openai(
+        OpenAI(**openai_client_kwargs(provider)),
+        mode=instructor_mode(provider),
+    )
