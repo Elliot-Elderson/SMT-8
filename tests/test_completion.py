@@ -137,7 +137,7 @@ def test_stop_metrics_ignore_unspecified_volume():
         assert last.silent_permission_volume_after == 0
 
 
-def test_mustallow_retry_witness_is_conflict_state():
+def test_mustallow_retry_witness_is_silent_seed():
     others = [flag for flag in ALL_FLAGS if flag != "destructive"]
     floor = make_rule(
         "A-flagged",
@@ -158,7 +158,8 @@ def test_mustallow_retry_witness_is_conflict_state():
     assert retried
     rule = retried[0]
     assert rule.justification is not None
-    assert sorted(rule.justification.witness["flags"]) == sorted(rule.condition.flag_false)
+    assert rule.condition.flag_false
+    assert rule.justification.witness["flags"] == []
     assert rule.justification.witness_decision_before == int(Decision.ALLOW)
     assert rule.justification.witness_decision_after == int(Decision.CHALLENGE)
 

@@ -182,16 +182,10 @@ def fix_silent_permissions(
             if _cond_literal_count(lowered) <= MAX_SYN_LITERALS:
                 seq[0] += 1
                 retry_id = f"SYN-{round_idx}-{seq[0]}"
-                justification = rule.justification
-                if justification is not None:
-                    justification = justification.model_copy(
-                        update={"witness": state_to_dict(conflict)}
-                    )
                 retry = rule.model_copy(
                     update={
                         "id": retry_id,
                         "condition": lowered,
-                        "justification": justification,
                     }
                 )
                 if _passes_gates(current, retry):
