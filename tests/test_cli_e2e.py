@@ -106,6 +106,41 @@ def test_offline_writes_extracted_ir(tmp_path):
     assert [r.id for r in loaded.rules] == [r.id for r in original.rules]
 
 
+def test_llm_pipeline_records_returned_extraction_mode(monkeypatch, tmp_path):
+    from smt_completeness.ir import Policy, RuleKind
+    from smt_completeness.vocab import Operation, ResourceClass
+    from tests.policy_fixtures import make_rule
+
+    policy = Policy(
+        rules=[
+            make_rule(
+                "R3.1",
+                RuleKind.MANDATORY_DENY,
+                operation=[Operation.READ],
+                resource_class=[ResourceClass.NORMAL_FILE],
+            )
+        ]
+    )
+
+    def fake_extract(*args, **kwargs):
+        return policy, "chapter"
+
+    monkeypatch.setattr("smt_completeness.cli.extract", fake_extract)
+    src = tmp_path / "src.md"
+    src.write_text("- 禁止读取普通文件。\n", encoding="utf-8")
+
+    result = run_pipeline(
+        doc_path=str(src),
+        out_dir=str(tmp_path / "out"),
+        complete=False,
+        use_llm=True,
+        source_doc=str(src),
+    )
+
+    qa = json.loads(open(result["extract_qa_path"], encoding="utf-8").read())
+    assert qa["extraction_mode"] == "chapter"
+
+
 def test_from_ir_matches_offline_before(tmp_path):
     out1 = str(tmp_path / "a")
     out2 = str(tmp_path / "b")

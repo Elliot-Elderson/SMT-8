@@ -65,13 +65,14 @@ def run_pipeline(
         provider = None
         model = None
     else:
-        policy = extract(
+        extracted = extract(
             doc_path,
             use_llm=use_llm,
             provider=llm_provider,
             model=llm_model,
+            return_mode=True,
         )
-        extraction_mode = "flat" if use_llm else "offline"
+        policy, extraction_mode = extracted
         provider = llm_provider if use_llm else None
         model = llm_model if use_llm else None
 

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from smt_completeness.extract_validate import (
@@ -21,6 +23,39 @@ SRC = """## 3. 必须拒绝的行为
 - 禁止读取或列举第 2.1 节定义的凭据文件和凭据目录。
 - 允许查看本机单个网络接口信息并不等于允许执行网段扫描。
 """
+
+
+def test_split_openclaw_has_three_chapters():
+    from smt_completeness.extract_validate import split_decision_chapters
+
+    text = Path("Abstract_Access_Control_Requirements.md").read_text(encoding="utf-8")
+    ch = split_decision_chapters(text)
+    assert ch is not None
+    assert "必须拒绝" in ch["3"]
+    assert "必须进一步判断" in ch["4"]
+    assert "可以保留" in ch["5"]
+    assert "文档目的" not in ch["3"]
+    assert "系统如何执行" not in ch["3"]
+
+
+def test_split_without_headings_is_none():
+    from smt_completeness.extract_validate import split_decision_chapters
+
+    assert split_decision_chapters("# 仅标题\n\n一段话") is None
+
+
+def test_renumber_rules_uses_stable_prefix():
+    from smt_completeness.extract_validate import renumber_rules
+
+    rules = [
+        _rule(RuleKind.MANDATORY_DENY, "凭据文件和凭据目录"),
+        _rule(RuleKind.MANDATORY_DENY, "凭据文件和凭据目录"),
+    ]
+
+    renumbered = renumber_rules(rules, "R3")
+
+    assert [rule.id for rule in renumbered] == ["R3.1", "R3.2"]
+    assert [rule.id for rule in rules] == ["R1", "R1"]
 
 
 def test_infer_kind_prohibit_is_deny():

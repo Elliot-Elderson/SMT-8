@@ -1,3 +1,5 @@
+import re
+
 from .ir import Policy, Rule, RuleKind
 
 MIN_ANCHOR_LEN = 8
@@ -10,6 +12,25 @@ _DECISION_KINDS = {
     RuleKind.MUST_CHALLENGE,
     RuleKind.MAY_ALLOW,
 }
+
+
+def split_decision_chapters(source_md: str) -> dict[str, str] | None:
+    """能匹配二级标题 ## 3. / ## 4. / ## 5. 则返回 {'3': 正文, '4': ..., '5': ...}（含标题行到下一 ## 之前）；否则 None。"""
+    matches = list(
+        re.finditer(r"(?m)^##\s+([345])\.\s.*(?:(?:\n(?!##\s+).*)*)", source_md)
+    )
+    chapters = {match.group(1): match.group(0).rstrip() for match in matches}
+    if set(chapters) != {"3", "4", "5"}:
+        return None
+    return {key: chapters[key] for key in ("3", "4", "5")}
+
+
+def renumber_rules(rules: list[Rule], prefix: str) -> list[Rule]:
+    """prefix 为 'R3'/'R4'/'R5'/'R'，id 改为 f'{prefix}.{n}' n from 1。"""
+    return [
+        rule.model_copy(update={"id": f"{prefix}.{index}"})
+        for index, rule in enumerate(rules, start=1)
+    ]
 
 
 def infer_kind_from_cues(text: str) -> RuleKind | None:

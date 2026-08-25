@@ -7,10 +7,27 @@ import z3
 from pydantic import BaseModel, Field
 
 from .compiler import Z3Env, is_vacuous
-from .extract_validate import validate_extracted_policy
+from .extract_validate import (
+    renumber_rules,
+    split_decision_chapters,
+    validate_extracted_policy,
+)
 from .ir import Policy, RuleKind
 
 _DEFAULT_IR = os.path.join(os.path.dirname(__file__), "data", "ir_openclaw.yaml")
+
+_EXTRACT_PROMPT = """你是访问控制需求形式化助手。只从「必须拒绝 / 必须进一步判断 / 可以允许」抽判定规则。
+禁止把「没有已有策略完整匹配时的默认允许 / LLM 兜底」写成规则。
+缺省维度=通配，但禁止五维全空；单维（如只 destructive）允许。
+只能使用受控词表，每条给出 source_anchor（必须是原文列表句中的连续片段）。
+正例：禁止读取凭据 → mandatory_deny，condition.resource_class=[credential]，operation=[read,list]。
+反例：不要把「无策略匹配则 LLM 兜底」写成一条无条件 must_challenge。"""
+
+_CHAPTER_DEFAULTS = {
+    "3": RuleKind.MANDATORY_DENY,
+    "4": RuleKind.MUST_CHALLENGE,
+    "5": RuleKind.MAY_ALLOW,
+}
 
 
 class SelfCheckReport(BaseModel):
@@ -163,40 +180,64 @@ def extract(
     use_llm: bool = False,
     provider: str = "openai",
     model: str | None = None,
-) -> Policy:
+    return_mode: bool = False,
+) -> Policy | tuple[Policy, str]:
     """Load the offline IR by default; optionally extract IR with an LLM."""
     if not use_llm:
         if doc_path.endswith((".yaml", ".yml")):
-            return load_offline_ir(doc_path)
+            policy = load_offline_ir(doc_path)
+            return (policy, "offline") if return_mode else policy
         raise ValueError(
             f"离线模式仅支持 YAML IR 文件（.yaml/.yml），收到: {doc_path!r}。"
             "请提供 YAML 路径，或使用 --use-llm 从自然语言文档抽取。"
         )
-    return _extract_with_llm(doc_path, provider=provider, model=model)
+    policy, mode = _extract_with_llm(doc_path, provider=provider, model=model)
+    return (policy, mode) if return_mode else policy
 
 
 def _extract_with_llm(
     doc_path: str,
     provider: str = "openai",
     model: str | None = None,
-) -> Policy:  # pragma: no cover
+) -> tuple[Policy, str]:  # pragma: no cover
     from .llm_client import EXTRACT_TEMPERATURE, build_instructor_client, resolve_model
 
     client = build_instructor_client(provider)
     resolved_model = resolve_model(provider, model)
     with open(doc_path, encoding="utf-8") as f:
         doc = f.read()
-    prompt = (
-        "你是访问控制需求形式化助手。请把下面的自然语言需求文档抽取为结构化 IR，"
-        "只能使用受控词表（Operation/ResourceClass/TargetZone/flag 名单），"
-        "每条规则给出 source_anchor 溯源。\n\n" + doc
-    )
-    policy: Policy = client.chat.completions.create(
-        model=resolved_model,
-        response_model=Policy,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=EXTRACT_TEMPERATURE,
-        max_retries=3,
-    )
-    validate_extracted_policy(policy, doc, chapter_default=None)
-    return policy
+    chapters = split_decision_chapters(doc)
+
+    def create_policy(source_md: str, chapter_default: RuleKind | None) -> Policy:
+        prompt = _EXTRACT_PROMPT
+        if chapter_default is not None:
+            prompt += (
+                f"\n本段默认 kind 为 {chapter_default.value}；"
+                "若子弹线索与默认冲突，以线索为准。"
+            )
+        prompt += "\n\n" + source_md
+        policy: Policy = client.chat.completions.create(
+            model=resolved_model,
+            response_model=Policy,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=EXTRACT_TEMPERATURE,
+            max_retries=3,
+        )
+        validate_extracted_policy(policy, source_md, chapter_default)
+        return policy
+
+    if chapters is None:
+        policy = create_policy(doc, chapter_default=None)
+        merged_rules = renumber_rules(policy.rules, "R")
+        mode = "flat"
+    else:
+        merged_rules = []
+        for chapter in ("3", "4", "5"):
+            default = _CHAPTER_DEFAULTS[chapter]
+            policy = create_policy(chapters[chapter], chapter_default=default)
+            merged_rules.extend(renumber_rules(policy.rules, f"R{chapter}"))
+        mode = "chapter"
+
+    if not merged_rules:
+        raise ValueError("抽取结果为空规则表")
+    return Policy(rules=merged_rules), mode
