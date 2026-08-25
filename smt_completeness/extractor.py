@@ -7,6 +7,7 @@ import z3
 from pydantic import BaseModel, Field
 
 from .compiler import Z3Env, is_vacuous
+from .extract_validate import validate_extracted_policy
 from .ir import Policy, RuleKind
 
 _DEFAULT_IR = os.path.join(os.path.dirname(__file__), "data", "ir_openclaw.yaml")
@@ -197,4 +198,5 @@ def _extract_with_llm(
         temperature=EXTRACT_TEMPERATURE,
         max_retries=3,
     )
+    validate_extracted_policy(policy, doc, chapter_default=None)
     return policy

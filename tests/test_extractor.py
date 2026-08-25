@@ -1,6 +1,6 @@
 import pytest
 
-from smt_completeness.extractor import load_offline_ir, self_check, extract
+from smt_completeness.extractor import _extract_with_llm, load_offline_ir, self_check, extract
 from smt_completeness.ir import Rule, RuleKind, Priority, Condition, Policy, Provenance
 from smt_completeness.vocab import Decision
 
@@ -69,6 +69,43 @@ def test_extract_offline_returns_policy():
 def test_extract_non_yaml_without_llm_raises():
     with pytest.raises(ValueError, match="离线模式仅支持 YAML IR"):
         extract("README.md", use_llm=False)
+
+
+def test_extract_with_llm_validates_policy_before_return(monkeypatch, tmp_path):
+    doc = tmp_path / "source.md"
+    doc.write_text("- 禁止读取凭据文件。\n", encoding="utf-8")
+    invalid_policy = Policy(
+        rules=[
+            Rule(
+                id="R1",
+                source_anchor="缺失的原文锚点至少八个字",
+                kind=RuleKind.MANDATORY_DENY,
+                condition=Condition(flag_true=["destructive"]),
+                decision=Decision.DENY,
+                priority=Priority.MANDATORY,
+                extraction_confidence="high",
+            )
+        ]
+    )
+
+    class _Completions:
+        def create(self, **kwargs):
+            return invalid_policy
+
+    class _Client:
+        chat = type("_Chat", (), {"completions": _Completions()})()
+
+    monkeypatch.setattr(
+        "smt_completeness.llm_client.build_instructor_client",
+        lambda provider: _Client(),
+    )
+    monkeypatch.setattr(
+        "smt_completeness.llm_client.resolve_model",
+        lambda provider, model: "test-model",
+    )
+
+    with pytest.raises(ValueError, match="source_anchor"):
+        _extract_with_llm(str(doc), provider="openai")
 
 
 def test_vacuity_does_not_import_all_states_on_extractor():
