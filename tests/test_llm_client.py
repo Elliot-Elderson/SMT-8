@@ -48,6 +48,12 @@ def test_instructor_mode_deepseek_uses_json():
     assert instructor_mode("openai") == instructor.Mode.TOOLS
 
 
+def test_extract_temperature_is_zero():
+    from smt_completeness.llm_client import EXTRACT_TEMPERATURE
+
+    assert EXTRACT_TEMPERATURE == 0
+
+
 def test_openai_client_kwargs_missing_key(monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     with pytest.raises(ValueError, match="DEEPSEEK_API_KEY"):

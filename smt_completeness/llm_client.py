@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 ProviderName = Literal["openai", "deepseek"]
 
+EXTRACT_TEMPERATURE = 0
+
 PROVIDER_CONFIG: dict[str, dict[str, str | None]] = {
     "openai": {
         "base_url": None,

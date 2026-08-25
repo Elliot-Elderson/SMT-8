@@ -74,7 +74,7 @@ def _extract_with_llm(
     provider: str = "openai",
     model: str | None = None,
 ) -> Policy:  # pragma: no cover
-    from .llm_client import build_instructor_client, resolve_model
+    from .llm_client import EXTRACT_TEMPERATURE, build_instructor_client, resolve_model
 
     client = build_instructor_client(provider)
     resolved_model = resolve_model(provider, model)
@@ -89,6 +89,7 @@ def _extract_with_llm(
         model=resolved_model,
         response_model=Policy,
         messages=[{"role": "user", "content": prompt}],
+        temperature=EXTRACT_TEMPERATURE,
         max_retries=3,
     )
     return policy
