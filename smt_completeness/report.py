@@ -220,11 +220,34 @@ def _append_detection_section(lines: list[str], report: FullReport) -> None:
     lines.append("")
 
 
-def _append_non_regression_placeholder(
-    lines: list[str], compare: FullReport | None
+_NON_REGRESSION_LABELS = (
+    ("monotone", "单调性"),
+    ("mustallow", "MustAllow 保持"),
+    ("original_lines", "原文逐行保留"),
+    ("ids_preserved", "条款只增不减"),
+)
+
+
+def _append_non_regression_section(
+    lines: list[str],
+    compare: FullReport | None,
+    non_regression: dict | None,
 ) -> None:
     lines.append("## 不回归保证\n")
-    if compare is None:
+    if non_regression is not None:
+        reasons = non_regression.get("reasons") or {}
+        for key, label in _NON_REGRESSION_LABELS:
+            if non_regression.get(key):
+                lines.append(f"- ✅ {label}")
+            else:
+                reason = reasons.get(key, "")
+                suffix = f"：{reason}" if reason else ""
+                lines.append(f"- ❌ {label}{suffix}")
+        if non_regression.get("original_lines"):
+            n_src = non_regression.get("source_lines", 0)
+            n_added = non_regression.get("added_lines", 0)
+            lines.append(f"- 原文 {n_src} 行全部保留、新增 {n_added} 行标注")
+    elif compare is None:
         lines.append("见补全后报告")
     else:
         lines.append("（占位，由 CLI 在补全后逐条打勾）")
@@ -399,6 +422,7 @@ def render_markdown(
     compare: FullReport | None = None,
     completion: CompletionResult | None = None,
     qa: ExtractQa | None = None,
+    non_regression: dict | None = None,
 ) -> str:
     lines: list[str] = []
 
@@ -414,7 +438,7 @@ def render_markdown(
 
     _append_defect_section(lines, report, compare, completion)
     _append_detection_section(lines, report)
-    _append_non_regression_placeholder(lines, compare)
+    _append_non_regression_section(lines, compare, non_regression)
     _append_replay_section(lines, report)
     _append_observation_section(lines, report)
 

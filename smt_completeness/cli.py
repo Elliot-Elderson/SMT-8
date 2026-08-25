@@ -4,6 +4,7 @@ import os
 
 import yaml
 
+from .compiler import is_monotone, preserves_mustallow
 from .completion import run_completion
 from .extractor import (
     build_extract_qa,
@@ -14,8 +15,60 @@ from .extractor import (
     write_extracted_ir,
 )
 from .extract_validate import collect_quality_warnings
-from .nl_patch import apply_nl_patch
-from .report import FullReport, build_report, render_markdown, write_policy_reports
+from .ir import Policy
+from .nl_patch import apply_nl_patch, original_lines_preserved
+from .report import build_report, render_markdown, write_policy_reports
+
+
+class NonRegressionError(ValueError):
+    """Raised when post-completion non-regression guarantees fail."""
+
+
+def _non_regression_result(
+    initial: Policy,
+    final: Policy,
+    source_md: str,
+    patched_text: str,
+) -> tuple[dict, list[str]]:
+    monotone_ok = is_monotone(initial, final)
+    mustallow_ok = preserves_mustallow(initial, final)
+    preserved, n_src, n_added = original_lines_preserved(source_md, patched_text)
+    initial_ids = {rule.id for rule in initial.rules}
+    final_ids = {rule.id for rule in final.rules}
+    ids_ok = initial_ids <= final_ids and len(final.rules) >= len(initial.rules)
+
+    reasons: dict[str, str] = {}
+    if not monotone_ok:
+        reasons["monotone"] = "存在状态从 Deny/Challenge 放宽为 Allow"
+    if not mustallow_ok:
+        reasons["mustallow"] = "MustAllow 状态被新规则破坏"
+    if not preserved:
+        reasons["original_lines"] = "原文有行未按序出现在补丁文档中"
+    if not ids_ok:
+        missing = sorted(initial_ids - final_ids)
+        reasons["ids_preserved"] = f"初始规则 id 未全部保留：{missing}"
+
+    payload = {
+        "monotone": monotone_ok,
+        "mustallow": mustallow_ok,
+        "original_lines": preserved,
+        "ids_preserved": ids_ok,
+        "source_lines": n_src,
+        "added_lines": n_added,
+        "reasons": reasons,
+    }
+    labels = {
+        "monotone": "单调性",
+        "mustallow": "MustAllow 保持",
+        "original_lines": "原文逐行保留",
+        "ids_preserved": "条款只增不减",
+    }
+    failed = [
+        f"{labels[key]}（{reasons[key]}）"
+        for key in labels
+        if not payload[key]
+    ]
+    return payload, failed
 
 
 def _rename_smt_export(
@@ -103,11 +156,13 @@ def run_pipeline(
     write_extracted_ir(policy, extracted_ir_path)
     write_extract_qa(qa, extract_qa_path)
 
-    # Build before report and apply the quality gate before rendering reports.
-    before = build_report(policy)
+    source_md = None
     if complete:
         with open(source_doc, encoding="utf-8") as f:
             source_md = f.read()
+
+    before = build_report(policy, source_md=source_md)
+    if complete:
         qa.warnings = collect_quality_warnings(policy, source_md, before)
         if qa.warnings and not force_complete:
             qa.skipped_completion = True
@@ -130,9 +185,18 @@ def run_pipeline(
         result = run_completion(policy.model_copy(deep=True))
         completion = result
         final_policy = result.final_policy
-        after = build_report(final_policy)
+        after = build_report(
+            final_policy,
+            source_md=source_md,
+            initial_policy=result.initial_policy,
+        )
+        patched_text, _stats = apply_nl_patch(
+            source_md, result.initial_policy, final_policy
+        )
+        nr, failed = _non_regression_result(
+            result.initial_policy, final_policy, source_md, patched_text
+        )
 
-        # Write report_after.* files using already-built after report, then overwrite md with comparison
         final_report_paths = _rename_smt_export(
             write_policy_reports(final_policy, out_dir, "report_after", report=after),
             out_dir,
@@ -140,14 +204,23 @@ def run_pipeline(
         )
         after_md_path = final_report_paths[0]
         with open(after_md_path, "w", encoding="utf-8") as f:
-            f.write(render_markdown(after, label="after", compare=before, completion=result))
+            f.write(
+                render_markdown(
+                    after,
+                    label="after",
+                    compare=before,
+                    completion=result,
+                    non_regression=nr,
+                )
+            )
 
-        # Write final_ir.yaml (enum values as strings via model_dump mode="json")
         final_ir_path = os.path.join(out_dir, "final_ir.yaml")
         with open(final_ir_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(final_policy.model_dump(mode="json"), f, allow_unicode=True)
 
-        patched_text, _ = apply_nl_patch(source_md, result.initial_policy, final_policy)
+        if failed:
+            raise NonRegressionError("不回归保证失败：" + "；".join(failed))
+
         completed_requirements_path = os.path.join(out_dir, "completed_requirements.md")
         with open(completed_requirements_path, "w", encoding="utf-8") as f:
             f.write(patched_text)

@@ -5,7 +5,8 @@ import yaml
 
 from smt_completeness.analysis.defects import check_defects
 from smt_completeness.analysis.evidence import enumerate_justified_gaps
-from smt_completeness.cli import run_pipeline
+from smt_completeness.cli import NonRegressionError, run_pipeline
+from smt_completeness.completion import CompletionResult
 from smt_completeness.extractor import extract, load_offline_ir, self_check
 from smt_completeness.ir import Policy
 
@@ -37,6 +38,8 @@ def test_end_to_end_offline(tmp_path):
     assert "补全前后对照" in open(after_md, encoding="utf-8").read()
     body = open(result["completed_requirements_path"], encoding="utf-8").read()
     assert "必须拒绝" in body
+    assert "本次补全摘要" in body
+    assert "不回归保证" in open(after_md, encoding="utf-8").read()
     initial = _load_policy(result["extracted_ir_path"])
     final = _load_policy(result["final_ir_path"])
     assert {r.id for r in initial.rules} <= {r.id for r in final.rules}
@@ -251,3 +254,39 @@ def test_quality_gate_skips_completion(monkeypatch, tmp_path):
     assert os.path.isfile(os.path.join(out, "extracted_ir.yaml"))
     assert os.path.isfile(os.path.join(out, "report_before.md"))
     assert not os.path.isfile(os.path.join(out, "final_ir.yaml"))
+
+
+def test_non_regression_failure_skips_completed_md(tmp_path, monkeypatch):
+    def fake_run(policy, max_rounds=8):
+        return CompletionResult(
+            rounds=[],
+            final_policy=policy,
+            converged=True,
+            initial_policy=policy,
+        )
+
+    def fake_patch(source_md, initial, final, **kwargs):
+        dropped = "\n".join(source_md.splitlines()[1:])
+        from smt_completeness.nl_patch import PatchStats
+        return dropped, PatchStats(
+            added=0, dead_annotated=0, duplicate_annotated=0,
+            source_lines=len(source_md.splitlines()), added_lines=0,
+        )
+
+    monkeypatch.setattr("smt_completeness.cli.run_completion", fake_run)
+    monkeypatch.setattr("smt_completeness.cli.apply_nl_patch", fake_patch)
+    out = str(tmp_path / "out")
+    try:
+        run_pipeline(
+            doc_path="smt_completeness/data/ir_openclaw.yaml",
+            out_dir=out,
+            complete=True,
+            use_llm=False,
+            source_doc="Abstract_Access_Control_Requirements.md",
+        )
+        raised = False
+    except NonRegressionError:
+        raised = True
+    assert raised is True
+    assert os.path.exists(os.path.join(out, "report_after.md"))
+    assert not os.path.exists(os.path.join(out, "completed_requirements.md"))
