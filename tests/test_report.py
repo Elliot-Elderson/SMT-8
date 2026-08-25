@@ -24,3 +24,22 @@ def test_compare_section_when_two_reports():
     before = build_report(p)
     md = render_markdown(before, label="after", compare=before)
     assert "补全前后对照" in md
+
+
+def test_report_includes_defect_sections_and_new_assumptions():
+    p = load_offline_ir()
+    src = open("Abstract_Access_Control_Requirements.md", encoding="utf-8").read()
+    before = build_report(p, source_md=src)
+    assert before.defects.silent_permission_volume >= 0
+    assert before.evidence.justified_gap_count >= 0
+    assert before.clause_coverage is not None
+    assert isinstance(before.duplicate_rule_ids, list)
+    md = render_markdown(before, label="before")
+    assert "缺陷清单" in md
+    assert "检出清单" in md
+    assert "A9" in md and "A10" in md
+    after = build_report(p, source_md=src, initial_policy=p)
+    compared = render_markdown(after, label="after", compare=before)
+    assert "有依据缺口" in compared
+    assert "静默允许" in compared
+    assert "仅观察" in compared
