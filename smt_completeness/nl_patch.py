@@ -4,6 +4,7 @@ from typing import Callable
 
 from .analysis.consistency import check_consistency
 from .ir import Policy, Rule, RuleKind
+from .nl_render import render_rule_sentence
 
 
 @dataclass(frozen=True)
@@ -12,35 +13,6 @@ class PatchStats:
     removed: int
     narrowed: int
 
-
-_OPERATION_LABELS = {
-    "read": "读取",
-    "write": "写入",
-    "send": "发送",
-    "execute": "执行",
-    "delete": "删除",
-    "list": "列出",
-}
-
-_RESOURCE_LABELS = {
-    "credential": "凭据",
-    "system_sensitive": "系统敏感资源",
-    "agent_private_context": "Agent 私有上下文",
-    "agent_memory": "Agent 记忆",
-    "private_data": "私人数据",
-    "config": "配置",
-    "source_code": "源代码",
-    "normal_file": "普通文件",
-    "external_service": "外部服务",
-    "unknown": "未知资源",
-}
-
-_TARGET_LABELS = {
-    "local": "本地",
-    "internal": "内部",
-    "external": "外部",
-    "unknown": "未知区域",
-}
 
 _ANNOTATIONS = (
     "已被更严拒绝覆盖",
@@ -95,28 +67,6 @@ def apply_nl_patch(
         text = _insert_rule_line(text, rule, reason, source_md=source_md)
 
     return text, PatchStats(added=len(added), removed=len(removed), narrowed=len(narrowed))
-
-
-def render_rule_sentence(rule: Rule) -> str:
-    resource = _format_dimension(rule.condition.resource_class, _RESOURCE_LABELS)
-    target = _format_dimension(rule.condition.target_zone, _TARGET_LABELS)
-    operation = _format_dimension(rule.condition.operation, _OPERATION_LABELS)
-
-    if rule.kind == RuleKind.MANDATORY_DENY:
-        return f"禁止对【{resource}】在【{target}】执行【{operation}】。"
-    if rule.kind == RuleKind.MUST_CHALLENGE:
-        return f"对【{resource}】在【{target}】执行【{operation}】时必须进一步判断。"
-    return f"对【{resource}】在【{target}】执行【{operation}】。"
-
-
-def _format_dimension(values: list[object], labels: dict[str, str]) -> str:
-    if not values:
-        return "任意"
-    return "、".join(labels.get(_enum_value(value), _enum_value(value)) for value in values)
-
-
-def _enum_value(value: object) -> str:
-    return str(getattr(value, "value", value))
 
 
 def _annotation_for_source(source_anchor: str) -> str:

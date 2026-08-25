@@ -1,4 +1,4 @@
-from smt_completeness.ir import Condition, Priority, Provenance, Rule, RuleKind
+from smt_completeness.ir import Condition, Justification, Priority, Provenance, Rule, RuleKind
 from smt_completeness.vocab import Decision, Operation, ResourceClass, TargetZone
 
 
@@ -13,6 +13,7 @@ def make_rule(
     flag_false: list[str] | None = None,
     source_anchor: str = "s",
     provenance: Provenance = Provenance.EXTRACTED,
+    justification: Justification | None = None,
 ) -> Rule:
     decision = {
         RuleKind.MANDATORY_DENY: Decision.DENY,
@@ -35,6 +36,7 @@ def make_rule(
         priority=priority,
         extraction_confidence="high",
         provenance=provenance,
+        justification=justification,
     )
 
 
