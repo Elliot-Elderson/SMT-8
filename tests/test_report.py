@@ -1,5 +1,6 @@
 from smt_completeness.extractor import load_offline_ir
-from smt_completeness.report import ASSUMPTIONS, build_report, render_markdown
+from smt_completeness.ir import Policy
+from smt_completeness.report import ASSUMPTIONS, _format_cube, build_report, render_markdown
 
 
 def test_build_report_has_no_baseline():
@@ -43,3 +44,16 @@ def test_report_includes_defect_sections_and_new_assumptions():
     assert "有依据缺口" in compared
     assert "静默允许" in compared
     assert "仅观察" in compared
+
+
+def test_observation_top8_lists_fallback_cubes():
+    report = build_report(Policy(rules=[]))
+    md = render_markdown(report, label="empty")
+    top8 = md.split("兜底依赖 Top-8")[1].split("- 未表态体积")[0]
+    for cube in report.coverage.fallback_cubes[:8]:
+        assert _format_cube(cube) in top8
+    fallback_text = {_format_cube(cube) for cube in report.coverage.fallback_cubes[:8]}
+    for cube in report.coverage.unspecified_cubes[:8]:
+        text = _format_cube(cube)
+        if text not in fallback_text:
+            assert text not in top8

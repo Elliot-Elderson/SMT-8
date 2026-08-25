@@ -6,6 +6,7 @@ from smt_completeness.nl_render import (
     TAG_NEW_DENY,
     render_dead_line,
     render_gap_line,
+    render_rule_sentence,
     render_silent_line,
     render_witness,
 )
@@ -88,3 +89,28 @@ def test_silent_and_dead_templates():
     assert dead.startswith(f"- {TAG_DEAD}")
     assert "512" in dead
     assert "R3.2" in dead
+
+
+def test_rule_sentence_includes_flag_true_label():
+    rule = make_rule(
+        "G-flag",
+        RuleKind.MUST_CHALLENGE,
+        operation=[Operation.WRITE],
+        resource_class=[ResourceClass.SOURCE_CODE],
+        target_zone=[TargetZone.EXTERNAL],
+        flag_true=["recon_scan"],
+    )
+    text = render_rule_sentence(rule)
+    assert "且带【侦察扫描】标签" in text
+    assert "recon_scan" not in text
+
+
+def test_rule_sentence_empty_flags_unchanged():
+    rule = make_rule(
+        "G-plain",
+        RuleKind.MANDATORY_DENY,
+        operation=[Operation.SEND],
+        resource_class=[ResourceClass.SYSTEM_SENSITIVE],
+        target_zone=[TargetZone.EXTERNAL, TargetZone.UNKNOWN],
+    )
+    assert render_rule_sentence(rule) == "禁止对【系统敏感资源】在【外部、未知区域】执行【发送】。"

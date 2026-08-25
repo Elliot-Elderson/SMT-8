@@ -19,27 +19,39 @@ class CoverageReport(BaseModel):
     v_unspecified_allow_ratio: float
     v_unspecified_challenge_ratio: float
     unspecified_cubes: list[Cube]
+    fallback_cubes: list[Cube]
 
 
-def _unspecified_constraint(blocked: list[State]):
+def _unspecified_constraint(blocked: list[State], *, exclude_default_allow: bool = False):
     def constraint(e):
         any_rule = z3.Or(
             e._kind_or(RuleKind.MANDATORY_DENY),
             e._kind_or(RuleKind.MUST_CHALLENGE),
             e._kind_or(RuleKind.MAY_ALLOW),
         )
-        blocks = [z3.Not(e.state_eq(state)) for state in blocked]
-        return z3.And(z3.Not(any_rule), *blocks)
+        parts = [z3.Not(any_rule), *[z3.Not(e.state_eq(state)) for state in blocked]]
+        if exclude_default_allow:
+            parts.append(z3.Not(e.default_allow_expr()))
+        return z3.And(*parts)
 
     return constraint
 
 
-def _unspecified_cubes(policy: Policy, env: BDDEnv, target) -> list[Cube]:
+def _unspecified_cubes(
+    policy: Policy,
+    env: BDDEnv,
+    target,
+    *,
+    exclude_default_allow: bool = False,
+) -> list[Cube]:
     seeds: list[State] = []
     cubes: list[Cube] = []
 
     for _ in range(16):
-        seed = find_witness(policy, _unspecified_constraint(seeds))
+        seed = find_witness(
+            policy,
+            _unspecified_constraint(seeds, exclude_default_allow=exclude_default_allow),
+        )
         if seed is None:
             break
         seeds.append(seed)
@@ -88,6 +100,7 @@ def check_coverage(policy: Policy) -> CoverageReport:
     unspecified_allow = env.count(unspecified & env.default_allow())
     unspecified_challenge = unspecified_count - unspecified_allow
     total = env.count(valid)
+    fallback = unspecified & ~env.default_allow()
 
     return CoverageReport(
         total=total,
@@ -100,4 +113,7 @@ def check_coverage(policy: Policy) -> CoverageReport:
         v_unspecified_allow_ratio=unspecified_allow / total,
         v_unspecified_challenge_ratio=unspecified_challenge / total,
         unspecified_cubes=_unspecified_cubes(policy, env, unspecified),
+        fallback_cubes=_unspecified_cubes(
+            policy, env, fallback, exclude_default_allow=True
+        ),
     )

@@ -1,10 +1,10 @@
 from smt_completeness.analysis.defects import check_defects
 from smt_completeness.analysis.evidence import enumerate_justified_gaps
 from smt_completeness.compiler import decide_py, is_monotone, preserves_mustallow
-from smt_completeness.completion import run_completion
+from smt_completeness.completion import fix_silent_permissions, run_completion
 from smt_completeness.ir import Policy, Provenance, RuleKind
 from smt_completeness.state_space import State
-from smt_completeness.vocab import Decision, Operation, ResourceClass, TargetZone
+from smt_completeness.vocab import ALL_FLAGS, Decision, Operation, ResourceClass, TargetZone
 from tests.policy_fixtures import deny_read_private_context, make_rule
 
 
@@ -135,6 +135,32 @@ def test_stop_metrics_ignore_unspecified_volume():
     if result.converged:
         assert last.justified_gap_count_after == 0
         assert last.silent_permission_volume_after == 0
+
+
+def test_mustallow_retry_witness_is_conflict_state():
+    others = [flag for flag in ALL_FLAGS if flag != "destructive"]
+    floor = make_rule(
+        "A-flagged",
+        RuleKind.MAY_ALLOW,
+        operation=[Operation.READ],
+        resource_class=[ResourceClass.NORMAL_FILE],
+        target_zone=[TargetZone.LOCAL],
+        flag_true=["destructive"],
+        flag_false=others,
+    )
+    current, added, skipped = fix_silent_permissions(Policy(rules=[floor]), 0, [0])
+    retried = [
+        rule
+        for rule in current.rules
+        if rule.id in added and rule.condition.flag_false
+    ]
+    assert skipped
+    assert retried
+    rule = retried[0]
+    assert rule.justification is not None
+    assert sorted(rule.justification.witness["flags"]) == sorted(rule.condition.flag_false)
+    assert rule.justification.witness_decision_before == int(Decision.ALLOW)
+    assert rule.justification.witness_decision_after == int(Decision.CHALLENGE)
 
 
 def test_completion_module_has_no_all_states():

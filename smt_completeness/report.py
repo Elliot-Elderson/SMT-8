@@ -283,9 +283,9 @@ def _append_observation_section(lines: list[str], report: FullReport) -> None:
     lines.append(
         f"- 兜底依赖体积：{_format_metric(c.v_unspecified_challenge, c.v_unspecified_challenge_ratio)}"
     )
-    if c.unspecified_cubes:
+    if c.fallback_cubes:
         lines.append("  - 兜底依赖 Top-8 立方体：")
-        for cube in c.unspecified_cubes[:8]:
+        for cube in c.fallback_cubes[:8]:
             lines.append(f"    - {_format_cube(cube)}")
     lines.append(f"- 未表态体积：{_format_metric(c.v_unspecified, c.v_unspecified_ratio)}")
     lines.append(f"- V_explicit（显式覆盖，策略表达力）：{c.v_explicit}（{c.v_explicit_ratio:.2%}）")

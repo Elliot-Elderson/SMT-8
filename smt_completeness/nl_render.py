@@ -75,12 +75,13 @@ def render_rule_sentence(rule: Rule) -> str:
     resource = _format_dimension(rule.condition.resource_class, _RESOURCE_LABELS)
     target = _format_dimension(rule.condition.target_zone, _TARGET_LABELS)
     operation = _format_dimension(rule.condition.operation, _OPERATION_LABELS)
+    flags = _format_flag_clause(rule.condition.flag_true, rule.condition.flag_false)
 
     if rule.kind == RuleKind.MANDATORY_DENY:
-        return f"禁止对【{resource}】在【{target}】执行【{operation}】。"
+        return f"禁止对【{resource}】在【{target}】执行【{operation}】{flags}。"
     if rule.kind == RuleKind.MUST_CHALLENGE:
-        return f"对【{resource}】在【{target}】执行【{operation}】时必须进一步判断。"
-    return f"对【{resource}】在【{target}】执行【{operation}】。"
+        return f"对【{resource}】在【{target}】执行【{operation}】{flags}时必须进一步判断。"
+    return f"对【{resource}】在【{target}】执行【{operation}】{flags}。"
 
 
 def render_gap_line(rule: Rule) -> str:
@@ -122,6 +123,17 @@ def render_duplicate_line(rule_id: str) -> str:
         f"词表更细时两者可能不同，故不删除。"
     )
     return f"- {body}"
+
+
+def _format_flag_clause(flag_true: list[str], flag_false: list[str]) -> str:
+    parts: list[str] = []
+    if flag_true:
+        labels = "、".join(FLAG_LABELS.get(flag, flag) for flag in flag_true)
+        parts.append(f"且带【{labels}】标签")
+    if flag_false:
+        labels = "、".join(FLAG_LABELS.get(flag, flag) for flag in flag_false)
+        parts.append(f"且不含【{labels}】标签")
+    return "".join(parts)
 
 
 def _format_dimension(values: list[object], labels: dict[str, str]) -> str:
