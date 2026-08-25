@@ -1,7 +1,8 @@
-from smt_completeness.analysis.redundancy import check_redundancy
+from smt_completeness.analysis.redundancy import check_duplicates, check_redundancy
 from smt_completeness.extractor import load_offline_ir
 from smt_completeness.ir import Condition, Policy, Priority, Rule, RuleKind
 from smt_completeness.vocab import Decision, Operation, ResourceClass, TargetZone
+from tests.policy_fixtures import make_rule
 
 
 def _r(id, **cond):
@@ -44,3 +45,38 @@ def test_redundancy_module_has_no_all_states():
     from smt_completeness.analysis import redundancy as m
 
     assert "all_states" not in open(m.__file__, encoding="utf-8").read()
+
+
+def test_contained_same_kind_rule_is_duplicate():
+    wide = make_rule(
+        "W",
+        RuleKind.MANDATORY_DENY,
+        operation=[Operation.READ],
+        resource_class=[ResourceClass.CREDENTIAL],
+    )
+    narrow = make_rule(
+        "N",
+        RuleKind.MANDATORY_DENY,
+        operation=[Operation.READ],
+        resource_class=[ResourceClass.CREDENTIAL],
+        target_zone=[TargetZone.LOCAL],
+    )
+    ids = check_duplicates(Policy(rules=[wide, narrow]))
+    assert "N" in ids
+    assert "W" not in ids
+
+
+def test_different_kind_overlap_is_not_duplicate():
+    deny = make_rule(
+        "D",
+        RuleKind.MANDATORY_DENY,
+        operation=[Operation.READ],
+        resource_class=[ResourceClass.CREDENTIAL],
+    )
+    chal = make_rule(
+        "C",
+        RuleKind.MUST_CHALLENGE,
+        operation=[Operation.READ],
+        resource_class=[ResourceClass.CREDENTIAL],
+    )
+    assert check_duplicates(Policy(rules=[deny, chal])) == []

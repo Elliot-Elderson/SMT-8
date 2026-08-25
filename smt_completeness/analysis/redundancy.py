@@ -1,7 +1,8 @@
 from pydantic import BaseModel
 
+from ..bdd_env import BDDEnv
 from ..compiler import policies_equivalent
-from ..ir import Policy
+from ..ir import DECISION_KINDS, Policy
 
 
 class RedundancyReport(BaseModel):
@@ -32,3 +33,27 @@ def check_redundancy(policy: Policy) -> RedundancyReport:
         redundant_rule_ids=removed_ids,
         total_rules=len(policy.rules),
     )
+
+
+def check_duplicates(policy: Policy) -> list[str]:
+    env = BDDEnv(policy)
+    duplicates: list[str] = []
+    for rule in policy.rules:
+        if rule.kind not in DECISION_KINDS:
+            continue
+        others = [
+            env.match_rule(other)
+            for other in policy.rules
+            if other.id != rule.id and other.kind == rule.kind
+        ]
+        if not others:
+            continue
+        union = others[0]
+        for node in others[1:]:
+            union = union | node
+        hit = env.valid & env.match_rule(rule)
+        if env.count(hit) == 0:
+            continue
+        if env.count(hit & ~union) == 0:
+            duplicates.append(rule.id)
+    return duplicates
