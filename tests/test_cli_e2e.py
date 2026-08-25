@@ -1,7 +1,17 @@
 import json
 import os
+
+import yaml
+
+from smt_completeness.analysis.defects import check_defects
+from smt_completeness.analysis.evidence import enumerate_justified_gaps
 from smt_completeness.cli import run_pipeline
 from smt_completeness.extractor import extract, load_offline_ir, self_check
+from smt_completeness.ir import Policy
+
+
+def _load_policy(path: str) -> Policy:
+    return Policy.model_validate(yaml.safe_load(open(path, encoding="utf-8")))
 
 
 def test_end_to_end_offline(tmp_path):
@@ -27,7 +37,16 @@ def test_end_to_end_offline(tmp_path):
     assert "补全前后对照" in open(after_md, encoding="utf-8").read()
     body = open(result["completed_requirements_path"], encoding="utf-8").read()
     assert "必须拒绝" in body
-    assert after["coverage"]["v_unspecified"] <= before["coverage"]["v_unspecified"] or after["monotonicity"]["inversion_count"] <= before["monotonicity"]["inversion_count"]
+    initial = _load_policy(result["extracted_ir_path"])
+    final = _load_policy(result["final_ir_path"])
+    assert {r.id for r in initial.rules} <= {r.id for r in final.rules}
+    assert len(final.rules) >= len(initial.rules)
+    gap_before = enumerate_justified_gaps(initial).justified_gap_count
+    gap_after = enumerate_justified_gaps(final).justified_gap_count
+    silent_before = check_defects(initial).silent_permission_volume
+    silent_after = check_defects(final).silent_permission_volume
+    assert gap_after <= gap_before and silent_after <= silent_before
+    assert gap_after < gap_before or silent_after < silent_before
 
 
 def test_self_check_before_offline_pipeline_keeps_completion_monotone(tmp_path):
@@ -46,7 +65,16 @@ def test_self_check_before_offline_pipeline_keeps_completion_monotone(tmp_path):
     _, after_js, _ = result["final_report_paths"]
     before = json.loads(open(before_js, encoding="utf-8").read())
     after = json.loads(open(after_js, encoding="utf-8").read())
-    assert after["coverage"]["v_unspecified"] <= before["coverage"]["v_unspecified"] or after["monotonicity"]["inversion_count"] <= before["monotonicity"]["inversion_count"]
+    initial = _load_policy(result["extracted_ir_path"])
+    final = _load_policy(result["final_ir_path"])
+    assert {r.id for r in initial.rules} <= {r.id for r in final.rules}
+    assert len(final.rules) >= len(initial.rules)
+    gap_before = enumerate_justified_gaps(initial).justified_gap_count
+    gap_after = enumerate_justified_gaps(final).justified_gap_count
+    silent_before = check_defects(initial).silent_permission_volume
+    silent_after = check_defects(final).silent_permission_volume
+    assert gap_after <= gap_before and silent_after <= silent_before
+    assert gap_after < gap_before or silent_after < silent_before
 
 
 def test_rerun_into_same_out_dir(tmp_path):

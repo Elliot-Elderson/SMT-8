@@ -80,8 +80,6 @@ def _completion_totals(completion: CompletionResult) -> dict[str, int | bool]:
         "rounds": len(completion.rounds),
         "converged": completion.converged,
         "added": sum(len(round.added_rule_ids) for round in completion.rounds),
-        "removed": sum(len(round.removed_rule_ids) for round in completion.rounds),
-        "narrowed": sum(len(round.narrowed_rule_ids) for round in completion.rounds),
         "skipped": sum(len(round.skipped) for round in completion.rounds),
     }
 
@@ -179,8 +177,6 @@ def render_markdown(
             lines.append(f"- 轮次：{totals['rounds']}")
             lines.append(f"- 收敛：{totals['converged']}")
             lines.append(f"- 新增规则：{totals['added']}")
-            lines.append(f"- 删除规则：{totals['removed']}")
-            lines.append(f"- 收窄规则：{totals['narrowed']}")
             lines.append(f"- 跳过：{totals['skipped']}")
             lines.append("")
 
