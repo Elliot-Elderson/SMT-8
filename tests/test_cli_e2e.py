@@ -1,7 +1,7 @@
 import json
 import os
 from smt_completeness.cli import run_pipeline
-from smt_completeness.extractor import extract
+from smt_completeness.extractor import extract, load_offline_ir, self_check
 
 
 def test_end_to_end_offline(tmp_path):
@@ -27,6 +27,25 @@ def test_end_to_end_offline(tmp_path):
     assert "补全前后对照" in open(after_md, encoding="utf-8").read()
     body = open(result["completed_requirements_path"], encoding="utf-8").read()
     assert "必须拒绝" in body
+    assert after["coverage"]["v_unspecified"] <= before["coverage"]["v_unspecified"] or after["monotonicity"]["inversion_count"] <= before["monotonicity"]["inversion_count"]
+
+
+def test_self_check_before_offline_pipeline_keeps_completion_monotone(tmp_path):
+    check = self_check(load_offline_ir())
+    assert check.ok is True
+
+    out = str(tmp_path / "out")
+    result = run_pipeline(
+        doc_path="smt_completeness/data/ir_openclaw.yaml",
+        out_dir=out,
+        complete=True,
+        use_llm=False,
+        source_doc="Abstract_Access_Control_Requirements.md",
+    )
+    _, before_js, _ = result["report_paths"]
+    _, after_js, _ = result["final_report_paths"]
+    before = json.loads(open(before_js, encoding="utf-8").read())
+    after = json.loads(open(after_js, encoding="utf-8").read())
     assert after["coverage"]["v_unspecified"] <= before["coverage"]["v_unspecified"] or after["monotonicity"]["inversion_count"] <= before["monotonicity"]["inversion_count"]
 
 

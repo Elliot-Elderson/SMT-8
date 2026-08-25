@@ -55,17 +55,37 @@ def must_allow(state: State, policy: Policy) -> bool:
 class Z3Env:
     def __init__(self, policy: Policy):
         self.policy = policy
+        self.ctx = z3.Context()
         prefix = f"smtc_{next(_ENV_IDS)}"
+        self.prefix = prefix
+        constructor_prefix = "smtc"
+        op_names = {
+            operation.value: f"{constructor_prefix}_{operation.value}"
+            for operation in Operation
+        }
+        rc_names = {
+            resource_class.value: f"{constructor_prefix}_{resource_class.value}"
+            for resource_class in ResourceClass
+        }
+        tz_names = {
+            target_zone.value: f"{constructor_prefix}_{target_zone.value}"
+            for target_zone in TargetZone
+        }
 
         self.op_sort, op_consts = z3.EnumSort(
-            f"{prefix}_Operation", [operation.value for operation in Operation]
+            f"{prefix}_Operation",
+            [op_names[operation.value] for operation in Operation],
+            ctx=self.ctx,
         )
         self.rc_sort, rc_consts = z3.EnumSort(
             f"{prefix}_ResourceClass",
-            [resource_class.value for resource_class in ResourceClass],
+            [rc_names[resource_class.value] for resource_class in ResourceClass],
+            ctx=self.ctx,
         )
         self.tz_sort, tz_consts = z3.EnumSort(
-            f"{prefix}_TargetZone", [target_zone.value for target_zone in TargetZone]
+            f"{prefix}_TargetZone",
+            [tz_names[target_zone.value] for target_zone in TargetZone],
+            ctx=self.ctx,
         )
         self._op_map = {
             operation.value: const for operation, const in zip(Operation, op_consts)
@@ -77,13 +97,22 @@ class Z3Env:
         self._tz_map = {
             target_zone.value: const for target_zone, const in zip(TargetZone, tz_consts)
         }
+        self._op_value_by_z3_name = {
+            name: value for value, name in op_names.items()
+        }
+        self._rc_value_by_z3_name = {
+            name: value for value, name in rc_names.items()
+        }
+        self._tz_value_by_z3_name = {
+            name: value for value, name in tz_names.items()
+        }
 
         self.op = z3.Const(f"{prefix}_op", self.op_sort)
         self.rc = z3.Const(f"{prefix}_rc", self.rc_sort)
         self.tz = z3.Const(f"{prefix}_tz", self.tz_sort)
-        self.flag = {name: z3.Bool(f"{prefix}_flag_{name}") for name in ALL_FLAGS}
+        self.flag = {name: z3.Bool(f"{prefix}_flag_{name}", ctx=self.ctx) for name in ALL_FLAGS}
         self.D = self.decision_expr(self.policy)
-        self.solver = z3.Solver()
+        self.solver = z3.Solver(ctx=self.ctx)
 
     def _match_expr(self, rule: Rule) -> z3.BoolRef:
         conds: list[z3.BoolRef] = []
@@ -116,7 +145,7 @@ class Z3Env:
             conds.append(self.flag[flag])
         for flag in condition.flag_false:
             conds.append(z3.Not(self.flag[flag]))
-        return z3.And(conds) if conds else z3.BoolVal(True)
+        return z3.And(conds) if conds else z3.BoolVal(True, ctx=self.ctx)
 
     def match_expr(self, rule: Rule) -> z3.BoolRef:
         return self._match_expr(rule)
@@ -134,7 +163,7 @@ class Z3Env:
         policy = policy or self.policy
         rules = policy.rules_of_kind(kind)
         if not rules:
-            return z3.BoolVal(False)
+            return z3.BoolVal(False, ctx=self.ctx)
         return z3.Or([self._match_expr(rule) for rule in rules])
 
     def decision_expr(self, policy: Policy) -> z3.ArithRef:
@@ -169,10 +198,28 @@ class Z3Env:
             conds.append(flag if name in state.flags else z3.Not(flag))
         return z3.And(conds)
 
+    @staticmethod
+    def _model_enum_value(
+        model: z3.ModelRef,
+        expr: z3.ExprRef,
+        values_by_z3_name: dict[str, str],
+    ) -> str:
+        z3_name = str(model.eval(expr, model_completion=True))
+        return values_by_z3_name[z3_name]
+
+    def model_operation_value(self, model: z3.ModelRef, expr: z3.ExprRef) -> str:
+        return self._model_enum_value(model, expr, self._op_value_by_z3_name)
+
+    def model_resource_class_value(self, model: z3.ModelRef, expr: z3.ExprRef) -> str:
+        return self._model_enum_value(model, expr, self._rc_value_by_z3_name)
+
+    def model_target_zone_value(self, model: z3.ModelRef, expr: z3.ExprRef) -> str:
+        return self._model_enum_value(model, expr, self._tz_value_by_z3_name)
+
     def model_to_state(self, model: z3.ModelRef) -> State:
-        op_value = str(model.eval(self.op, model_completion=True))
-        rc_value = str(model.eval(self.rc, model_completion=True))
-        tz_value = str(model.eval(self.tz, model_completion=True))
+        op_value = self.model_operation_value(model, self.op)
+        rc_value = self.model_resource_class_value(model, self.rc)
+        tz_value = self.model_target_zone_value(model, self.tz)
         flags = frozenset(
             name
             for name, flag in self.flag.items()
@@ -238,8 +285,8 @@ def is_vacuous(policy: Policy, rule: Rule) -> bool:
 
 def export_smtlib(policy: Policy, path: str) -> None:
     env = build_env(policy)
-    decision = z3.Int("decision")
-    solver = z3.Solver()
+    decision = z3.Int(f"{env.prefix}_decision", ctx=env.ctx)
+    solver = z3.Solver(ctx=env.ctx)
     solver.add(decision == env.D)
 
     output_path = Path(path)

@@ -40,7 +40,7 @@ def _find_pair_examples(
     D1 = env.decision_expr(policy)
     D2 = z3.substitute(D1, (env.rc, rc2))
 
-    solver = z3.Solver()
+    solver = z3.Solver(ctx=env.ctx)
     solver.add(constraint_fn(env, rc2, D1, D2))
 
     results: list[tuple[State, State, int, int]] = []
@@ -48,10 +48,10 @@ def _find_pair_examples(
         if solver.check() != z3.sat:
             break
         model = solver.model()
-        op_val = str(model.eval(env.op, model_completion=True))
-        rc1_val = str(model.eval(env.rc, model_completion=True))
-        rc2_val = str(model.eval(rc2, model_completion=True))
-        tz_val = str(model.eval(env.tz, model_completion=True))
+        op_val = env.model_operation_value(model, env.op)
+        rc1_val = env.model_resource_class_value(model, env.rc)
+        rc2_val = env.model_resource_class_value(model, rc2)
+        tz_val = env.model_target_zone_value(model, env.tz)
         flags = frozenset(
             name for name, fv in env.flag.items()
             if z3.is_true(model.eval(fv, model_completion=True))
