@@ -54,6 +54,7 @@ python -m smt_completeness.cli --doc smt_completeness/data/ir_openclaw.yaml --ou
 ```
 
 然后打开 `out/report_before.md`。全流程含补全时去掉 `--no-complete`，大约一两分钟。
+`--from-ir out/extracted_ir.yaml` 可从冻结 IR 复跑；抽取质量警告存在时用 `--force-complete` 强制补全。
 
 ---
 
@@ -106,6 +107,7 @@ OpenClaw 原文：`Abstract_Access_Control_Requirements.md`。离线 fixture 是
 | --- | --- |
 | `out/report_before.md` | 给人读的补全前评测报告 |
 | `out/report_before.json` | 给脚本/二次分析的结构化数字（无 baseline 字段） |
+| `out/extracted_ir.yaml` | 硬闸通过后冻结的抽取 Policy IR |
 | `out/policy_before.smt2` | 补全前判定函数的 SMT-LIB |
 | `out/report_after.md` | 补全后报告，含前后对照表（未加 `--no-complete`） |
 | `out/report_after.json` | 补全后结构化数字 |

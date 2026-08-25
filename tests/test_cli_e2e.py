@@ -144,3 +144,47 @@ def test_from_ir_and_use_llm_returns_2():
         ]
     )
     assert rc == 2
+
+
+def test_quality_gate_skips_completion(monkeypatch, tmp_path):
+    import yaml
+
+    from smt_completeness.ir import Policy, RuleKind
+    from smt_completeness.vocab import Operation, ResourceClass
+    from tests.policy_fixtures import make_rule
+
+    called = {"n": 0}
+
+    def boom(policy):
+        called["n"] += 1
+        raise AssertionError("run_completion must not be called")
+
+    monkeypatch.setattr("smt_completeness.cli.run_completion", boom)
+    policy = Policy(
+        rules=[
+            make_rule(
+                "C1",
+                RuleKind.MUST_CHALLENGE,
+                operation=[Operation.READ],
+                resource_class=[ResourceClass.NORMAL_FILE],
+            )
+        ]
+    )
+    irp = tmp_path / "only_chal.yaml"
+    irp.write_text(
+        yaml.safe_dump(policy.model_dump(mode="json"), allow_unicode=True),
+        encoding="utf-8",
+    )
+    src = tmp_path / "src.md"
+    src.write_text("禁止\n禁止\n禁止\n禁止\n禁止\n", encoding="utf-8")
+    out = str(tmp_path / "out")
+    run_pipeline(
+        doc_path=str(irp),
+        out_dir=out,
+        complete=True,
+        source_doc=str(src),
+    )
+    assert called["n"] == 0
+    assert os.path.isfile(os.path.join(out, "extracted_ir.yaml"))
+    assert os.path.isfile(os.path.join(out, "report_before.md"))
+    assert not os.path.isfile(os.path.join(out, "final_ir.yaml"))

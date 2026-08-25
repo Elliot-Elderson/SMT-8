@@ -1,14 +1,18 @@
 import pytest
 
 from smt_completeness.extract_validate import (
+    W_NO_DENY_BUT_PROHIBIT,
     anchor_is_heading_only,
+    collect_quality_warnings,
     infer_kind_from_cues,
     validate_anchor,
     validate_extracted_policy,
     validate_rule_kind,
 )
 from smt_completeness.ir import Condition, Policy, Priority, Rule, RuleKind
-from smt_completeness.vocab import Decision
+from smt_completeness.report import build_report
+from smt_completeness.vocab import Decision, Operation, ResourceClass
+from tests.policy_fixtures import make_rule
 
 SRC = """## 3. 必须拒绝的行为
 
@@ -87,3 +91,19 @@ def test_rule_kind_without_cue_accepts_chapter_default():
 def test_validate_extracted_policy_checks_decision_rules():
     policy = Policy(rules=[_rule(RuleKind.MANDATORY_DENY, "凭据文件和凭据目录")])
     validate_extracted_policy(policy, SRC, chapter_default=None)
+
+
+def test_warn_no_deny_but_prohibit():
+    p = Policy(
+        rules=[
+            make_rule(
+                "C1",
+                RuleKind.MUST_CHALLENGE,
+                operation=[Operation.READ],
+                resource_class=[ResourceClass.NORMAL_FILE],
+            )
+        ]
+    )
+    src = "禁止\n禁止\n禁止\n禁止\n禁止\n"
+    w = collect_quality_warnings(p, src, build_report(p))
+    assert W_NO_DENY_BUT_PROHIBIT in w

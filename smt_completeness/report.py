@@ -9,7 +9,7 @@ from .analysis.redundancy import RedundancyReport, check_redundancy
 from .analysis.tightening import TighteningReport, check_tightening
 from .compiler import export_smtlib
 from .completion import CompletionResult
-from .extractor import SelfCheckReport, self_check
+from .extractor import ExtractQa, SelfCheckReport, self_check
 from .ir import Policy
 from .vocab import ALL_FLAGS
 
@@ -92,6 +92,7 @@ def render_markdown(
     label: str,
     compare: FullReport | None = None,
     completion: CompletionResult | None = None,
+    qa: ExtractQa | None = None,
 ) -> str:
     c = report.coverage
     lines: list[str] = []
@@ -107,6 +108,13 @@ def render_markdown(
     lines.append(f"- 显式规则命中体积：{_format_metric(c.v_explicit, c.v_explicit_ratio)}")
     lines.append(f"- 未表态体积：{_format_metric(c.v_unspecified, c.v_unspecified_ratio)}")
     lines.append("")
+
+    if qa is not None:
+        lines.append("## 抽取质量")
+        lines.append(f"- extraction_mode: {qa.extraction_mode}")
+        lines.append(f"- kind_counts: {qa.kind_counts}")
+        lines.append(f"- warnings: {qa.warnings}")
+        lines.append("")
 
     lines.append("## 2. 表达力与未表态\n")
     lines.append(f"- 状态空间总数：{c.total}")
@@ -190,6 +198,7 @@ def write_policy_reports(
     out_dir: str,
     stem: str,
     report: "FullReport | None" = None,
+    qa: ExtractQa | None = None,
 ) -> tuple[str, str, str]:
     os.makedirs(out_dir, exist_ok=True)
     used_report = report if report is not None else build_report(policy)
@@ -198,7 +207,7 @@ def write_policy_reports(
     smt_path = os.path.join(out_dir, f"policy_{stem}.smt2")
 
     with open(md_path, "w", encoding="utf-8") as f:
-        f.write(render_markdown(used_report, label=stem))
+        f.write(render_markdown(used_report, label=stem, qa=qa))
     with open(json_path, "w", encoding="utf-8") as f:
         f.write(used_report.model_dump_json(indent=2))
     export_smtlib(policy, smt_path)

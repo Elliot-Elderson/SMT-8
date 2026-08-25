@@ -20,6 +20,9 @@ python -m smt_completeness.cli --doc smt_completeness/data/ir_openclaw.yaml --ou
 # 只出报告、不跑补全闭环
 python -m smt_completeness.cli --doc smt_completeness/data/ir_openclaw.yaml --out out --no-complete
 
+# 从已冻结的抽取 IR 继续分析
+python -m smt_completeness.cli --from-ir out/extracted_ir.yaml --out out2 --source-doc Abstract_Access_Control_Requirements.md
+
 # 启用真实 LLM 抽取（OpenAI，需 OPENAI_API_KEY）
 python -m smt_completeness.cli --doc Abstract_Access_Control_Requirements.md --out out --use-llm
 
@@ -33,9 +36,11 @@ python -m smt_completeness.cli --doc Abstract_Access_Control_Requirements.md --o
 环境变量：
 - OpenAI：`OPENAI_API_KEY`
 - DeepSeek：`DEEPSEEK_API_KEY`（OpenAI 兼容接口 `https://api.deepseek.com`）
+- `--force-complete`：抽取质量警告存在时仍强制运行补全闭环。
 
 产物：
 - `out/report_before.md` / `out/report_before.json`：补全前完备性评测报告
+- `out/extracted_ir.yaml`：硬闸通过后冻结的抽取 Policy IR，可配合 `--from-ir` 复跑。
 - `out/report_after.md` / `out/report_after.json`：补全后评测报告（含补全前后对照）
 - `out/policy_before.smt2` / `out/policy_after.smt2`：补全前后判定函数的 SMT-LIB 导出
 - `out/final_ir.yaml`：LLM 单调补全后的最终 Policy IR

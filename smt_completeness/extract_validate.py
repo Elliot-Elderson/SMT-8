@@ -1,6 +1,9 @@
 from .ir import Policy, Rule, RuleKind
 
 MIN_ANCHOR_LEN = 8
+W_NO_DENY_BUT_PROHIBIT = "W_NO_DENY_BUT_PROHIBIT"
+W_EXPLICIT_FULL = "W_EXPLICIT_FULL"
+W_HIGH_C4 = "W_HIGH_C4"
 
 _DECISION_KINDS = {
     RuleKind.MANDATORY_DENY,
@@ -105,3 +108,34 @@ def validate_extracted_policy(
             continue
         validate_anchor(source_md, rule.source_anchor)
         validate_rule_kind(rule, source_md, chapter_default)
+
+
+def collect_quality_warnings(policy: Policy, source_md: str, report) -> list[str]:
+    """
+    原文 count(禁止)+count(不得) >= 5 且 mandatory_deny==0 → W_NO_DENY_BUT_PROHIBIT
+    v_explicit==122880 or v_unspecified==0 → W_EXPLICIT_FULL
+    判定规则数>=8 且 C4 冗余占比>=0.8 → W_HIGH_C4
+    """
+    warnings: list[str] = []
+    decision_rules = [rule for rule in policy.rules if rule.kind in _DECISION_KINDS]
+    deny_count = sum(1 for rule in policy.rules if rule.kind == RuleKind.MANDATORY_DENY)
+
+    if source_md.count("禁止") + source_md.count("不得") >= 5 and deny_count == 0:
+        warnings.append(W_NO_DENY_BUT_PROHIBIT)
+
+    if report.coverage.v_explicit == 122880 or report.coverage.v_unspecified == 0:
+        warnings.append(W_EXPLICIT_FULL)
+
+    decision_rule_ids = {rule.id for rule in decision_rules}
+    redundant_decision_count = sum(
+        1
+        for rule_id in report.redundancy.redundant_rule_ids
+        if rule_id in decision_rule_ids
+    )
+    if (
+        len(decision_rules) >= 8
+        and redundant_decision_count / len(decision_rules) >= 0.8
+    ):
+        warnings.append(W_HIGH_C4)
+
+    return warnings

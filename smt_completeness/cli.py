@@ -13,6 +13,7 @@ from .extractor import (
     write_extract_qa,
     write_extracted_ir,
 )
+from .extract_validate import collect_quality_warnings
 from .nl_patch import apply_nl_patch
 from .report import FullReport, build_report, render_markdown, write_policy_reports
 
@@ -101,10 +102,20 @@ def run_pipeline(
     write_extracted_ir(policy, extracted_ir_path)
     write_extract_qa(qa, extract_qa_path)
 
-    # Build before report and write report_before.* files
+    # Build before report and apply the quality gate before rendering reports.
     before = build_report(policy)
+    if complete:
+        with open(source_doc, encoding="utf-8") as f:
+            source_md = f.read()
+        qa.warnings = collect_quality_warnings(policy, source_md, before)
+        if qa.warnings and not force_complete:
+            qa.skipped_completion = True
+            print(f"[警告] 抽取质量警告: {', '.join(qa.warnings)}")
+            print("[警告] 已跳过补全，使用 --force-complete 强制")
+        write_extract_qa(qa, extract_qa_path)
+
     report_paths = _rename_smt_export(
-        write_policy_reports(policy, out_dir, "report_before", report=before),
+        write_policy_reports(policy, out_dir, "report_before", report=before, qa=qa),
         out_dir,
         "policy_before.smt2",
     )
@@ -114,7 +125,7 @@ def run_pipeline(
     completed_requirements_path = None
     final_ir_path = None
 
-    if complete:
+    if complete and not qa.skipped_completion:
         result = run_completion(policy.model_copy(deep=True))
         completion = result
         final_policy = result.final_policy
@@ -135,9 +146,6 @@ def run_pipeline(
         with open(final_ir_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(final_policy.model_dump(mode="json"), f, allow_unicode=True)
 
-        # Read source doc and apply NL patch
-        with open(source_doc, encoding="utf-8") as f:
-            source_md = f.read()
         patched_text, _ = apply_nl_patch(source_md, result.initial_policy, final_policy)
         completed_requirements_path = os.path.join(out_dir, "completed_requirements.md")
         with open(completed_requirements_path, "w", encoding="utf-8") as f:
