@@ -1,17 +1,11 @@
 import re
 
-from .ir import Policy, Rule, RuleKind
+from .ir import DECISION_KINDS, Policy, Rule, RuleKind
 
 MIN_ANCHOR_LEN = 8
 W_NO_DENY_BUT_PROHIBIT = "W_NO_DENY_BUT_PROHIBIT"
 W_EXPLICIT_FULL = "W_EXPLICIT_FULL"
 W_HIGH_C4 = "W_HIGH_C4"
-
-_DECISION_KINDS = {
-    RuleKind.MANDATORY_DENY,
-    RuleKind.MUST_CHALLENGE,
-    RuleKind.MAY_ALLOW,
-}
 
 
 def split_decision_chapters(source_md: str) -> dict[str, str] | None:
@@ -99,7 +93,7 @@ def validate_rule_kind(
     线索 kind 与 rule.kind 不一致 → ValueError。
     无线索：chapter_default 非空则要求 rule.kind==default；flat（default is None）则 ValueError。
     """
-    if rule.kind not in _DECISION_KINDS:
+    if rule.kind not in DECISION_KINDS:
         return
 
     anchor = rule.source_anchor.strip()
@@ -125,7 +119,7 @@ def validate_extracted_policy(
 ) -> None:
     """对每个判定 kind 规则跑 validate_anchor + validate_rule_kind。"""
     for rule in policy.rules:
-        if rule.kind not in _DECISION_KINDS:
+        if rule.kind not in DECISION_KINDS:
             continue
         validate_anchor(source_md, rule.source_anchor)
         validate_rule_kind(rule, source_md, chapter_default)
@@ -138,7 +132,7 @@ def collect_quality_warnings(policy: Policy, source_md: str, report) -> list[str
     判定规则数>=8 且 C4 冗余占比>=0.8 → W_HIGH_C4
     """
     warnings: list[str] = []
-    decision_rules = [rule for rule in policy.rules if rule.kind in _DECISION_KINDS]
+    decision_rules = [rule for rule in policy.rules if rule.kind in DECISION_KINDS]
     deny_count = sum(1 for rule in policy.rules if rule.kind == RuleKind.MANDATORY_DENY)
 
     if source_md.count("禁止") + source_md.count("不得") >= 5 and deny_count == 0:

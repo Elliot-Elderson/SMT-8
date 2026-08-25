@@ -103,3 +103,44 @@ def test_synthesized_provenance_accepted():
     )
     assert r.provenance is Provenance.SYNTHESIZED
     assert r.provenance.value == "synthesized"
+
+
+def test_decision_kinds_is_public():
+    from smt_completeness.ir import DECISION_KINDS, RuleKind
+
+    assert DECISION_KINDS == {
+        RuleKind.MANDATORY_DENY,
+        RuleKind.MUST_CHALLENGE,
+        RuleKind.MAY_ALLOW,
+    }
+
+
+def test_justification_round_trip_on_synthesized_rule():
+    from smt_completeness.ir import Justification
+
+    just = Justification(
+        defect="sensitivity_gap",
+        evidence_rule_ids=["R3.6"],
+        witness={
+            "operation": "send",
+            "resource_class": "system_sensitive",
+            "target_zone": "external",
+            "flags": [],
+        },
+        witness_decision_before=1,
+        witness_decision_after=2,
+    )
+    r = _rule(
+        id="SYN-0-1",
+        provenance=Provenance.SYNTHESIZED,
+        justification=just,
+    )
+    assert r.justification is not None
+    assert r.justification.defect == "sensitivity_gap"
+    assert r.justification.evidence_rule_ids == ["R3.6"]
+    dumped = r.model_dump(mode="json")
+    assert dumped["justification"]["witness"]["operation"] == "send"
+
+
+def test_extracted_rule_justification_defaults_none():
+    assert _rule().justification is None

@@ -21,7 +21,7 @@ class Priority(str, Enum):
     DEFAULT = "default"
 
 
-_DECISION_KINDS = {
+DECISION_KINDS = {
     RuleKind.MANDATORY_DENY,
     RuleKind.MUST_CHALLENGE,
     RuleKind.MAY_ALLOW,
@@ -32,6 +32,14 @@ class Provenance(str, Enum):
     EXTRACTED = "extracted"
     LLM_SYNTHESIZED = "llm_synthesized"
     SYNTHESIZED = "synthesized"
+
+
+class Justification(BaseModel):
+    defect: Literal["silent_permission", "sensitivity_gap"]
+    evidence_rule_ids: list[str] = Field(default_factory=list)
+    witness: dict
+    witness_decision_before: int
+    witness_decision_after: int
 
 
 class Condition(BaseModel):
@@ -75,6 +83,7 @@ class Rule(BaseModel):
     extraction_confidence: Literal["high", "medium", "low"]
     reviewer_status: str = "auto_approved"
     provenance: Provenance = Provenance.EXTRACTED
+    justification: Justification | None = None
 
     @model_validator(mode="after")
     def _kind_matches_decision(self) -> "Rule":
@@ -92,7 +101,7 @@ class Rule(BaseModel):
 
     @model_validator(mode="after")
     def _decision_kind_has_literal(self) -> "Rule":
-        if self.kind not in _DECISION_KINDS:
+        if self.kind not in DECISION_KINDS:
             return self
         c = self.condition
         if not (c.operation or c.resource_class or c.target_zone or c.flag_true or c.flag_false):
