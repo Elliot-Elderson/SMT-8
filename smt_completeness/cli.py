@@ -1,10 +1,18 @@
 import argparse
+import hashlib
 import os
 
 import yaml
 
 from .completion import run_completion
-from .extractor import extract, self_check
+from .extractor import (
+    build_extract_qa,
+    extract,
+    load_offline_ir,
+    self_check,
+    write_extract_qa,
+    write_extracted_ir,
+)
 from .nl_patch import apply_nl_patch
 from .report import FullReport, build_report, render_markdown, write_policy_reports
 
@@ -18,6 +26,14 @@ def _rename_smt_export(
     return md_path, json_path, new_smt_path
 
 
+def _sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def run_pipeline(
     doc_path: str,
     out_dir: str,
@@ -26,7 +42,12 @@ def run_pipeline(
     llm_provider: str = "openai",
     llm_model: str | None = None,
     source_doc: str | None = None,
+    from_ir: str | None = None,
+    force_complete: bool = False,
 ) -> dict:
+    if from_ir and use_llm:
+        raise ValueError("--from-ir 不能与 --use-llm 同时使用")
+
     if source_doc is None:
         source_doc = "Abstract_Access_Control_Requirements.md"
 
@@ -36,19 +57,49 @@ def run_pipeline(
             "请用 --source-doc 指定路径，或用 --no-complete 跳过补全闭环。"
         )
 
-    policy = extract(
-        doc_path,
-        use_llm=use_llm,
-        provider=llm_provider,
-        model=llm_model,
-    )
+    loaded_source = from_ir or doc_path
+    if from_ir:
+        policy = load_offline_ir(from_ir)
+        extraction_mode = "offline"
+        provider = None
+        model = None
+    else:
+        policy = extract(
+            doc_path,
+            use_llm=use_llm,
+            provider=llm_provider,
+            model=llm_model,
+        )
+        extraction_mode = "flat" if use_llm else "offline"
+        provider = llm_provider if use_llm else None
+        model = llm_model if use_llm else None
+
     check = self_check(policy)
+    os.makedirs(out_dir, exist_ok=True)
+    qa = build_extract_qa(
+        policy=policy,
+        source_doc=loaded_source,
+        source_sha256=_sha256_file(loaded_source),
+        self_check=check,
+        provider=provider,
+        model=model,
+        extraction_mode=extraction_mode,
+        skipped_completion=not complete,
+    )
+
     if not check.ok:
+        write_extract_qa(qa, os.path.join(out_dir, "extract_qa.json"))
         raise ValueError(
-            f"IR 自检未通过：重复 id={check.duplicate_ids}，恒假规则={check.vacuous_rule_ids}"
+            "IR 自检未通过："
+            f"重复 id={check.duplicate_ids}，"
+            f"恒假规则={check.vacuous_rule_ids}，"
+            f"恒真规则={check.tautology_rule_ids}"
         )
 
-    os.makedirs(out_dir, exist_ok=True)
+    extracted_ir_path = os.path.join(out_dir, "extracted_ir.yaml")
+    extract_qa_path = os.path.join(out_dir, "extract_qa.json")
+    write_extracted_ir(policy, extracted_ir_path)
+    write_extract_qa(qa, extract_qa_path)
 
     # Build before report and write report_before.* files
     before = build_report(policy)
@@ -64,7 +115,7 @@ def run_pipeline(
     final_ir_path = None
 
     if complete:
-        result = run_completion(policy)
+        result = run_completion(policy.model_copy(deep=True))
         completion = result
         final_policy = result.final_policy
         after = build_report(final_policy)
@@ -98,6 +149,8 @@ def run_pipeline(
         "completion": completion,
         "completed_requirements_path": completed_requirements_path,
         "final_ir_path": final_ir_path,
+        "extracted_ir_path": extracted_ir_path,
+        "extract_qa_path": extract_qa_path,
     }
 
 
@@ -105,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Agent 访问控制需求完备性检查器（MVP demo）"
     )
-    parser.add_argument("--doc", required=True, help="需求文档或离线 IR(.yaml) 路径")
+    parser.add_argument("--doc", required=False, help="需求文档或离线 IR(.yaml) 路径")
     parser.add_argument("--out", default="out", help="报告输出目录")
     parser.add_argument("--no-complete", action="store_true", help="跳过 IR 补全闭环，只输出分析报告")
     parser.add_argument(
@@ -134,17 +187,37 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="（保留选项）NL 润色，当前忽略",
     )
+    parser.add_argument("--from-ir", default=None, help="从已冻结的 YAML IR 继续运行")
+    parser.add_argument(
+        "--force-complete",
+        action="store_true",
+        help="强制进入补全闭环（Task 6 生效，当前仅接线）",
+    )
     args = parser.parse_args(argv)
 
-    result = run_pipeline(
-        doc_path=args.doc,
-        out_dir=args.out,
-        complete=not args.no_complete,
-        use_llm=args.use_llm,
-        llm_provider=args.llm_provider,
-        llm_model=args.llm_model,
-        source_doc=args.source_doc,
-    )
+    if not args.doc and not args.from_ir:
+        print("[错误] --doc is required unless --from-ir is provided")
+        return 2
+    if args.from_ir and args.use_llm:
+        print("[错误] --from-ir 不能与 --use-llm 同时使用")
+        return 2
+
+    try:
+        result = run_pipeline(
+            doc_path=args.doc or args.from_ir,
+            out_dir=args.out,
+            complete=not args.no_complete,
+            use_llm=args.use_llm,
+            llm_provider=args.llm_provider,
+            llm_model=args.llm_model,
+            source_doc=args.source_doc,
+            from_ir=args.from_ir,
+            force_complete=args.force_complete,
+        )
+    except ValueError as exc:
+        print(f"[错误] {exc}")
+        return 2
+
     md, js, smt = result["report_paths"]
     print(f"[报告] Markdown: {md}")
     print(f"[报告] JSON:     {js}")

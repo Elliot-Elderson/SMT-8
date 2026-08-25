@@ -1,8 +1,10 @@
+import json
 import os
+from datetime import datetime, timezone
 
 import yaml
 import z3
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .compiler import Z3Env, is_vacuous
 from .ir import Policy, RuleKind
@@ -17,6 +19,65 @@ class SelfCheckReport(BaseModel):
     vacuous_rule_ids: list[str]
     tautology_rule_ids: list[str] = []
     ok: bool
+
+
+class ExtractQa(BaseModel):
+    source_doc: str
+    source_sha256: str
+    provider: str | None = None
+    model: str | None = None
+    extraction_mode: str
+    temperature: int = 0
+    extracted_at: str
+    self_check: SelfCheckReport
+    kind_counts: dict[str, int]
+    warnings: list[str] = Field(default_factory=list)
+    skipped_completion: bool = False
+
+
+def kind_counts(policy: Policy) -> dict[str, int]:
+    counts = {kind.value: 0 for kind in RuleKind}
+    for rule in policy.rules:
+        counts[rule.kind.value] = counts.get(rule.kind.value, 0) + 1
+    return counts
+
+
+def build_extract_qa(
+    policy: Policy,
+    source_doc: str,
+    source_sha256: str,
+    self_check: SelfCheckReport,
+    provider: str | None = None,
+    model: str | None = None,
+    extraction_mode: str = "offline",
+    warnings: list[str] | None = None,
+    skipped_completion: bool = False,
+) -> ExtractQa:
+    return ExtractQa(
+        source_doc=source_doc,
+        source_sha256=source_sha256,
+        provider=provider,
+        model=model,
+        extraction_mode=extraction_mode,
+        extracted_at=datetime.now(timezone.utc).isoformat(),
+        self_check=self_check,
+        kind_counts=kind_counts(policy),
+        warnings=warnings or [],
+        skipped_completion=skipped_completion,
+    )
+
+
+def write_extracted_ir(policy: Policy, path: str) -> None:
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(policy.model_dump(mode="json"), f, allow_unicode=True)
+
+
+def write_extract_qa(qa: ExtractQa, path: str) -> None:
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(qa.model_dump(mode="json"), f, ensure_ascii=False, indent=2)
+        f.write("\n")
 
 
 def load_offline_ir(path: str | None = None) -> Policy:

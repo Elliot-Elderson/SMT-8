@@ -1,6 +1,7 @@
 import json
 import os
 from smt_completeness.cli import run_pipeline
+from smt_completeness.extractor import extract
 
 
 def test_end_to_end_offline(tmp_path):
@@ -67,3 +68,60 @@ def test_main_accepts_deepseek_provider_offline(tmp_path):
         ]
     )
     assert rc == 0
+
+
+def test_offline_writes_extracted_ir(tmp_path):
+    out = str(tmp_path / "out")
+    run_pipeline(
+        doc_path="smt_completeness/data/ir_openclaw.yaml",
+        out_dir=out,
+        complete=False,
+        use_llm=False,
+    )
+    ir_path = os.path.join(out, "extracted_ir.yaml")
+    qa_path = os.path.join(out, "extract_qa.json")
+    assert os.path.isfile(ir_path)
+    assert os.path.isfile(qa_path)
+    loaded = extract(ir_path, use_llm=False)
+    original = extract("smt_completeness/data/ir_openclaw.yaml", use_llm=False)
+    assert [r.id for r in loaded.rules] == [r.id for r in original.rules]
+
+
+def test_from_ir_matches_offline_before(tmp_path):
+    out1 = str(tmp_path / "a")
+    out2 = str(tmp_path / "b")
+    run_pipeline(
+        doc_path="smt_completeness/data/ir_openclaw.yaml",
+        out_dir=out1,
+        complete=False,
+    )
+    extracted = os.path.join(out1, "extracted_ir.yaml")
+    r1 = run_pipeline(
+        doc_path="smt_completeness/data/ir_openclaw.yaml",
+        out_dir=str(tmp_path / "c"),
+        complete=False,
+    )
+    r2 = run_pipeline(
+        doc_path="smt_completeness/data/ir_openclaw.yaml",
+        out_dir=out2,
+        complete=False,
+        from_ir=extracted,
+    )
+    b1 = json.loads(open(r1["report_paths"][1], encoding="utf-8").read())
+    b2 = json.loads(open(r2["report_paths"][1], encoding="utf-8").read())
+    assert b1["coverage"]["v_unspecified"] == b2["coverage"]["v_unspecified"]
+    assert b1["monotonicity"]["inversion_count"] == b2["monotonicity"]["inversion_count"]
+
+
+def test_from_ir_and_use_llm_returns_2():
+    rc = __import__("smt_completeness.cli", fromlist=["main"]).main(
+        [
+            "--doc",
+            "smt_completeness/data/ir_openclaw.yaml",
+            "--from-ir",
+            "smt_completeness/data/ir_openclaw.yaml",
+            "--use-llm",
+            "--no-complete",
+        ]
+    )
+    assert rc == 2
