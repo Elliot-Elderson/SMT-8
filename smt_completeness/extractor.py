@@ -1,10 +1,11 @@
 import os
 
 import yaml
+import z3
 from pydantic import BaseModel
 
-from .compiler import is_vacuous
-from .ir import Policy
+from .compiler import Z3Env, is_vacuous
+from .ir import Policy, RuleKind
 
 _DEFAULT_IR = os.path.join(os.path.dirname(__file__), "data", "ir_openclaw.yaml")
 
@@ -14,6 +15,7 @@ class SelfCheckReport(BaseModel):
     id_unique: bool
     duplicate_ids: list[str]
     vacuous_rule_ids: list[str]
+    tautology_rule_ids: list[str] = []
     ok: bool
 
 
@@ -38,16 +40,58 @@ def _vacuous_ids(policy: Policy) -> list[str]:
     return [rule.id for rule in policy.rules if is_vacuous(policy, rule)]
 
 
+def _tautology_ids(policy: Policy) -> list[str]:
+    env = Z3Env(policy)
+    decision_kinds = (
+        RuleKind.MANDATORY_DENY,
+        RuleKind.MUST_CHALLENGE,
+        RuleKind.MAY_ALLOW,
+    )
+    tautology_ids: list[str] = []
+    seen: set[str] = set()
+
+    def add_rule_id(rule_id: str) -> None:
+        if rule_id not in seen:
+            tautology_ids.append(rule_id)
+            seen.add(rule_id)
+
+    def covers_valid(match: z3.BoolRef) -> bool:
+        env.solver.push()
+        env.solver.add(z3.Not(match))
+        result = env.solver.check()
+        env.solver.pop()
+        return result == z3.unsat
+
+    for kind in decision_kinds:
+        for rule in policy.rules_of_kind(kind):
+            if covers_valid(env.match_expr(rule)):
+                add_rule_id(rule.id)
+
+        rules = policy.rules_of_kind(kind)
+        if rules and covers_valid(env._kind_or(kind)):
+            for rule in rules:
+                add_rule_id(rule.id)
+
+    return tautology_ids
+
+
 def self_check(policy: Policy) -> SelfCheckReport:
     duplicate_ids = _duplicate_ids(policy)
     vacuous_rule_ids = _vacuous_ids(policy)
+    tautology_rule_ids = _tautology_ids(policy)
     id_unique = not duplicate_ids
-    ok = id_unique and not vacuous_rule_ids
+    ok = (
+        id_unique
+        and not vacuous_rule_ids
+        and not tautology_rule_ids
+        and len(policy.rules) >= 1
+    )
     return SelfCheckReport(
         total_rules=len(policy.rules),
         id_unique=id_unique,
         duplicate_ids=duplicate_ids,
         vacuous_rule_ids=vacuous_rule_ids,
+        tautology_rule_ids=tautology_rule_ids,
         ok=ok,
     )
 

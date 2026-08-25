@@ -1,7 +1,7 @@
 import pytest
 
 from smt_completeness.extractor import load_offline_ir, self_check, extract
-from smt_completeness.ir import Rule, RuleKind, Priority, Condition, Policy
+from smt_completeness.ir import Rule, RuleKind, Priority, Condition, Policy, Provenance
 from smt_completeness.vocab import Decision
 
 
@@ -12,6 +12,29 @@ def test_offline_ir_loads_and_passes_self_check():
     assert rep.ok is True
     assert rep.id_unique is True
     assert rep.vacuous_rule_ids == []
+
+
+def test_self_check_rejects_empty_policy():
+    rep = self_check(Policy(rules=[]))
+    assert rep.ok is False
+    assert rep.total_rules == 0
+
+
+def test_self_check_detects_match_tautology():
+    r = Rule.model_construct(
+        id="T",
+        source_anchor="没有已有策略完整匹配时进入兜底",
+        kind=RuleKind.MUST_CHALLENGE,
+        condition=Condition(),
+        decision=Decision.CHALLENGE,
+        priority=Priority.MANDATORY,
+        extraction_confidence="high",
+        reviewer_status="auto_approved",
+        provenance=Provenance.EXTRACTED,
+    )
+    rep = self_check(Policy.model_construct(rules=[r]))
+    assert "T" in rep.tautology_rule_ids
+    assert rep.ok is False
 
 
 def test_self_check_detects_duplicate_id():
