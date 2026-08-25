@@ -64,6 +64,32 @@ def test_rule_kind_must_match_decision():
                  id="R-allow").id == "R-allow"
 
 
+def test_decision_rule_requires_at_least_one_literal():
+    with pytest.raises(ValidationError, match="至少一个条件"):
+        Rule(
+            id="X",
+            source_anchor="禁止读取凭据文件和凭据目录",
+            kind=RuleKind.MUST_CHALLENGE,
+            condition=Condition(),
+            decision=Decision.CHALLENGE,
+            priority=Priority.MANDATORY,
+            extraction_confidence="high",
+        )
+
+
+def test_single_flag_deny_still_valid():
+    r = Rule(
+        id="R3.2.1",
+        source_anchor="禁止系统破坏",
+        kind=RuleKind.MANDATORY_DENY,
+        condition=Condition(flag_true=["destructive"]),
+        decision=Decision.DENY,
+        priority=Priority.MANDATORY,
+        extraction_confidence="high",
+    )
+    assert r.condition.flag_true == ["destructive"]
+
+
 def test_synthesized_provenance_accepted():
     r = Rule(
         id="SYN-0-1",

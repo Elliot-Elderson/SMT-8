@@ -21,6 +21,13 @@ class Priority(str, Enum):
     DEFAULT = "default"
 
 
+_DECISION_KINDS = {
+    RuleKind.MANDATORY_DENY,
+    RuleKind.MUST_CHALLENGE,
+    RuleKind.MAY_ALLOW,
+}
+
+
 class Provenance(str, Enum):
     EXTRACTED = "extracted"
     LLM_SYNTHESIZED = "llm_synthesized"
@@ -80,6 +87,19 @@ class Rule(BaseModel):
             raise ValueError(
                 f"规则 kind={self.kind.value!r} 要求 decision={expected.value!r}，"
                 f"实际为 {self.decision.value!r}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _decision_kind_has_literal(self) -> "Rule":
+        if self.kind not in _DECISION_KINDS:
+            return self
+        c = self.condition
+        if not (c.operation or c.resource_class or c.target_zone or c.flag_true or c.flag_false):
+            raise ValueError(
+                "判定规则必须至少一个条件文字"
+                "（operation / resource_class / target_zone / flag_true / flag_false）；"
+                "禁止五维全空，但允许只约束单一 flag。"
             )
         return self
 
